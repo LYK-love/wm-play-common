@@ -7,3 +7,6 @@ dependencies = ["pygame", "Pillow", "numpy"]
 
 [tool.setuptools]
 packages = ["wm_play"]
+
+[tool.setuptools.package-dir]
+wm_play = "."
