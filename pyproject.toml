@@ -1,0 +1,9 @@
+[project]
+name = "wm-play-common"
+version = "0.1.0"
+description = "Shared interactive play abstractions for action-conditioned world models."
+requires-python = ">=3.10"
+dependencies = ["pygame", "Pillow", "numpy"]
+
+[tool.setuptools]
+packages = ["wm_play"]
