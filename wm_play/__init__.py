@@ -14,6 +14,8 @@ __all__ = [
     'add_remote_client_args',
     'add_remote_server_args',
     'validate_remote_server_args',
+    'run_remote_client',
 ]
 
 from .cli import add_local_play_args, add_remote_client_args, add_remote_server_args, validate_remote_server_args
+from .client import run_remote_client
