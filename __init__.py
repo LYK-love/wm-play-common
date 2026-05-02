@@ -1,21 +1,10 @@
-"""Shared interactive play framework for real envs and world models."""
-from .api import GameEnv, PlaySession, RenderableGameEnv, StepResult
-from .session import EnvPlaySession, EnvSlot, obs_to_image
+"""Shared interactive play framework for real envs and world models.
 
-__all__ = [
-    'EnvPlaySession',
-    'EnvSlot',
-    'GameEnv',
-    'PlaySession',
-    'RenderableGameEnv',
-    'StepResult',
-    'obs_to_image',
-    'add_local_play_args',
-    'add_remote_client_args',
-    'add_remote_server_args',
-    'validate_remote_server_args',
-    'run_remote_client',
-]
+Import concrete modules directly, for example:
 
-from .cli import add_local_play_args, add_remote_client_args, add_remote_server_args, validate_remote_server_args
-from .client import run_remote_client
+  from wm_play.api import GameEnv, StepResult
+  from wm_play.cli import add_remote_client_args
+
+The package initializer intentionally avoids eager imports so lightweight clients
+only need their actual runtime dependencies.
+"""
