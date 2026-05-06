@@ -1,114 +1,77 @@
 # wm-play-common
 
-`wm-play-common` is a small framework for interactive play with real environments and action-conditioned world models. It provides the shared play contract, UI loops, TCP protocol, and common CLI arguments used by DreamerV3, DIAMOND, OC-STORM, and STORM adapters.
+`wm-play-common` provides the shared browser-based play infrastructure for
+action-conditioned world models and real environments. Model projects provide
+their own adapters for config parsing, checkpoint loading, environment
+construction, latent rollout, rendering, and policy integration.
 
-The framework deliberately does **not** load model checkpoints or own model-specific configuration. Each model project implements its own adapter for config parsing, checkpoint/component loading, image encode/decode, latent-state handling, and policy integration.
+## Contract
 
-## Core Contract
-
-World models and real environments are adapted to the same step-style API:
-
-```python
-obs, reward, done, trunc, info = env.step(action)
-```
-
-In this package, the normalized interface is `wm_play.api.GameEnv`:
+Adapters expose a `PlaySession` with the usual step semantics:
 
 ```python
-from wm_play.api import GameEnv, StepResult
-
-class MyEnv(GameEnv):
-    @property
-    def action_count(self) -> int:
-        return 6
-
-    def reset(self) -> StepResult:
-        ...
-
-    def step(self, action: int) -> StepResult:
-        ...
+result = session.step(action)
+obs = result.obs
+reward = result.reward
+done = result.done
+trunc = result.trunc
+info = result.info
 ```
 
-Use `wm_play.session.EnvPlaySession` when your environment already follows this contract. Write a project adapter when the model needs custom loading, latent-state transitions, render logic, or policy control.
+The web server owns the control loop, keyboard handling, pause/reset/step,
+server-side FPS control, JPEG frame streaming, and optional RAM panel plumbing.
 
-## What This Repo Provides
+## Provides
 
-- `wm_play.api`: common `GameEnv`, `RenderableGameEnv`, `PlaySession`, and `StepResult` types.
-- `wm_play.session`: generic play-session implementation for step-style envs.
-- `wm_play.local_ui`: local pygame UI loop.
-- `wm_play.remote`: server-side remote-play loop and frame streaming.
-- `wm_play.client`: reusable native TCP client.
-- `wm_play.protocol`: compact TCP message protocol.
-- `wm_play.cli`: common CLI argument helpers.
+- `wm_play.api`: `GameEnv`, `RenderableGameEnv`, `PlaySession`, `StepResult`
+- `wm_play.session`: generic session wrapper for simple step-style envs
+- `wm_play.web_server`: Flask/SocketIO browser UI and server-side game loop
+- `wm_play.cli`: shared play CLI flags
+- `wm_play.server_summary`: compact startup summary formatting
 
-## Repository Layout
+There is no pygame/native client. The local machine only needs a browser and,
+when connecting to a remote server, SSH port forwarding.
+
+## Layout
 
 ```text
 wm-play-common/
   README.md
   pyproject.toml
-  docs/
-    architecture.md
-    adapter-guide.md
-  src/
-    wm_play/
-      api.py
-      cli.py
-      client.py
-      local_ui.py
-      protocol.py
-      remote.py
-      session.py
+  src/wm_play/
+    api.py
+    cli.py
+    server_summary.py
+    session.py
+    web_server.py
+    web/
+      index.html
+      app.js
+      styles.css
 ```
 
-There is also a root-level `__init__.py` compatibility shim. It allows this repository to be mounted directly as a submodule named `wm_play` while still keeping the installable package in `src/wm_play`.
+The root-level `__init__.py` is a compatibility shim so this repository can be
+mounted directly as a submodule named `wm_play`.
 
-## Installation
+## Install
 
-For normal package usage:
+Standalone:
 
 ```bash
 python -m pip install -e /path/to/wm-play-common
 ```
 
-For submodule usage, mount this repository at a package-like path, for example:
+Submodule:
 
-```text
-project-root/
-  wm_play/        # submodule pointing to wm-play-common
-  project_adapter/
+```bash
+git submodule update --init --recursive
+python -m pip install -e ./wm_play
 ```
 
-Then `import wm_play.cli` works through the compatibility shim.
+DIAMOND uses `./src/wm_play` as its submodule path.
 
-## Dependencies
+## RAM Panel Rule
 
-The native client needs only:
-
-- Python 3.10+
-- `pygame`
-- `Pillow`
-
-The local/server UI path also uses `numpy`. Model projects may require their own runtime stacks, for example JAX or PyTorch.
-
-## Extension Boundary
-
-Shared framework responsibilities:
-
-- UI behavior and controls
-- remote protocol
-- frame streaming
-- common CLI flags such as `--controller`, `--fps`, `--size`, `--tcp-host`, `--tcp-port`
-- generic session state for real envs and world models
-
-Model-project responsibilities:
-
-- config files and model-specific CLI flags
-- full-checkpoint and component-checkpoint loading
-- model-specific component names
-- image encoder/decoder glue
-- latent rollout logic
-- reward/terminal predictor invocation
-- policy checkpoint integration
-
-This boundary is intentional: new world models should only implement an adapter, not copy UI/protocol/client code.
+The RAM panel is optional and appears only when the project adapter exposes RAM
+state/edit methods and the server is running real env only. If any WM backend is
+loaded, the UI stays in normal play mode without RAM controls.
