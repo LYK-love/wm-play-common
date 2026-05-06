@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WM Play</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">WM Play</p>
+          <h1>Action-Conditioned World Model Play</h1>
+        </div>
+        <div class="status-pill" id="conn">connecting</div>
+      </header>
+
+      <main class="shell">
+        <section class="left-stack">
+          <section class="panel">
+            <div class="panel-title">
+              <p class="eyebrow">Run</p>
+              <h2>Control Bar</h2>
+            </div>
+            <div class="transport">
+              <button id="pause" class="btn btn-command">Pause</button>
+              <button id="step" class="btn">Step</button>
+              <button id="reset" class="btn">Reset</button>
+              <button id="controller" class="btn">Controller</button>
+              <button id="prev" class="btn">Prev Backend</button>
+              <button id="next" class="btn">Next Backend</button>
+              <div class="speed">
+                <label for="fps">FPS</label>
+                <input id="fps" type="range" min="1" max="60" value="15" />
+                <span id="fps-value">15</span>
+              </div>
+            </div>
+            <p class="hint">Keyboard: WASD/Space actions, Enter reset, . pause, E step, M controller, Left/Right backend, Up/Down horizon.</p>
+          </section>
+
+          <section class="game-card">
+            <div class="frame-wrap">
+              <img id="frame" alt="game frame" />
+            </div>
+            <div class="frame-caption" id="caption">waiting for first frame</div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-title">
+              <p class="eyebrow">State</p>
+              <h2>Play Status</h2>
+            </div>
+            <div id="status-lines" class="status-lines"></div>
+          </section>
+        </section>
+
+        <aside id="ram-panel" class="right-stack hidden">
+          <section class="panel">
+            <div class="panel-title split">
+              <div>
+                <p class="eyebrow">RAM Monitor</p>
+                <h2>Watch</h2>
+              </div>
+              <button id="toggle-all-ram" class="btn btn-quiet">All RAM</button>
+            </div>
+            <div id="ram-watch" class="ram-list"></div>
+            <div id="ram-all" class="ram-grid hidden"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-title split">
+              <div>
+                <p class="eyebrow">RAM Edit</p>
+                <h2>Edit</h2>
+              </div>
+              <button id="clear-persistent" class="btn btn-danger">Clear Persist</button>
+            </div>
+            <div class="edit-row">
+              <select id="edit-dim"></select>
+              <input id="edit-value" inputmode="numeric" placeholder="0..255" />
+              <button id="apply-once" class="btn">Set Once</button>
+              <button id="persist" class="btn btn-command">Persist</button>
+            </div>
+            <p class="hint">RAM writes are enabled only while paused and only for real-env RAM sessions.</p>
+          </section>
+        </aside>
+      </main>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>
