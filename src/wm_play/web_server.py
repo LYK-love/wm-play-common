@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import pygame
-from flask import Flask, send_from_directory
+from flask import Flask, jsonify, send_from_directory
 from flask_socketio import SocketIO
 
 from .api import PlaySession
@@ -324,6 +324,20 @@ def index():
 @app.route('/<path:path>')
 def static_proxy(path):
   return send_from_directory(WEB_DIR, path)
+
+
+@app.route('/snapshot')
+def snapshot():
+  if _shared is None or not _shared.frame_jpeg:
+    return jsonify({'ready': False})
+  with _shared.lock:
+    jpg = _shared.frame_jpeg
+    state = dict(_shared.state)
+  return jsonify({
+      'ready': True,
+      'image': base64.b64encode(jpg).decode('utf-8'),
+      **state,
+  })
 
 
 @socketio.on('connect')
