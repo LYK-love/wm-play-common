@@ -138,7 +138,10 @@ def _render_state(
     paused = bool(shared.paused)
     fps = int(shared.target_fps)
 
-  ram_capable = _session_supports_ram(session) and _session_is_real_only(session)
+  ram_capable = (
+      bool(getattr(args, 'ram', False)) and
+      _session_supports_ram(session) and
+      _session_is_real_only(session))
   if ram_capable:
     frame = session._read_rgb_frame()
     from PIL import Image

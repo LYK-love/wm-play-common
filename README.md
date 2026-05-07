@@ -44,6 +44,13 @@ The client machine does not need the model project's conda environment, model
 frameworks, CUDA, checkpoints, or `wm-play-common`; all model/env code runs on
 the server.
 
+## RAM Mode
+
+RAM mode is explicit. Pass `--ram` to the project server to request the RAM
+panel. The common web layer only enables it when the session is real-env-only
+and the adapter exposes RAM read/write hooks; otherwise the normal play UI is
+used.
+
 ## Layout
 
 ```text
