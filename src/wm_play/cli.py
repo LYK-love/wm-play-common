@@ -17,6 +17,9 @@ def add_remote_server_args(
   parser.add_argument('--size', type=int, default=size_default,
                       help='Rendered frame size before JPEG encoding.')
   parser.add_argument('--no-header', action='store_true')
+  parser.add_argument('--ram', action='store_true',
+                      help='Enable RAM panel mode. This only takes effect for '
+                           'real-env-only sessions whose adapter exposes RAM.')
   parser.add_argument('--jpeg-quality', type=int, default=jpeg_quality_default,
                       help='JPEG quality for streamed frames, valid range [1, 95].')
   parser.add_argument('--web-host', type=str, default='127.0.0.1',
