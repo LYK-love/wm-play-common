@@ -19,7 +19,10 @@ info = result.info
 ```
 
 The web server owns the control loop, keyboard handling, pause/reset/step,
-server-side FPS control, JPEG frame streaming, and optional RAM panel plumbing.
+server-side FPS control, JPEG frame streaming, and optional generic RAM panel
+plumbing. Project adapters still own model/env semantics. For example, the
+Arcade-Learning-Environment adapter provides Pong-specific RAM slot names,
+quick-start behavior, recording, and export hooks.
 
 ## Provides
 
@@ -51,6 +54,11 @@ panel. The common web layer only enables it when the session is real-env-only
 and the adapter exposes RAM read/write hooks; otherwise the normal play UI is
 used.
 
+The common layer treats RAM as editable byte slots plus optional adapter hooks.
+It does not define game-specific RAM meanings. Slot labels, focused dimensions,
+recording/export behavior, and convenience actions such as Pong serve setup
+belong in the project adapter.
+
 ## Layout
 
 ```text
@@ -67,10 +75,17 @@ wm-play-common/
       index.html
       app.js
       styles.css
+      vendor/
+        socket.io.min.js
 ```
 
 The root-level `__init__.py` is a compatibility shim so this repository can be
 mounted directly as a submodule named `wm_play`.
+
+The browser UI uses a vendored Socket.IO client from the npm
+`socket.io-client` package. This avoids loading `/socket.io/socket.io.js` from
+the Python server, which can fail when Flask-SocketIO and the browser client
+protocol versions do not match.
 
 ## Install
 

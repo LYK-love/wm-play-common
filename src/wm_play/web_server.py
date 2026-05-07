@@ -111,6 +111,12 @@ def _session_supports_ram(session: PlaySession) -> bool:
       getattr(session, '_read_rgb_frame', None))
 
 
+def _set_session_paused(session: PlaySession, paused: bool) -> None:
+  fn = getattr(session, 'set_paused', None)
+  if callable(fn):
+    fn(bool(paused))
+
+
 def _session_is_real_only(session: PlaySession) -> bool:
   fn = getattr(session, 'is_real_only', None)
   if callable(fn):
@@ -151,7 +157,7 @@ def _render_state(
     state = dict(session.get_web_state())
     state['ram_enabled'] = bool(state.get('all_dims') or state.get('focus_dims'))
   else:
-    header = [] if args.no_header else session.header(action, info)
+    header = [] if getattr(args, 'no_header', False) else session.header(action, info)
     img = session.render_frame(args.size, [])
     state = {
         'ram_enabled': False,
@@ -182,6 +188,7 @@ def _process_event(
   etype = event.get('type')
   if etype == 'keydown':
     key = int(event['key'])
+    mod = int(event.get('mod', 0))
     if key in ACTION_KEYS:
       shared.set_key(key, True)
       return False, False, False
@@ -190,6 +197,8 @@ def _process_event(
     if key == pygame.K_PERIOD:
       with shared.lock:
         shared.paused = not shared.paused
+        paused = shared.paused
+      _set_session_paused(session, paused)
       return False, False, True
     if key == pygame.K_e:
       return False, True, False
@@ -216,6 +225,10 @@ def _process_event(
       with shared.lock:
         shared.target_fps = min(120, int(shared.target_fps) + 1)
       return False, False, True
+    fn = getattr(session, 'on_keydown', None)
+    if callable(fn):
+      fn(key, mod)
+      return False, False, True
     return False, False, False
 
   if etype == 'keyup':
@@ -232,20 +245,27 @@ def _process_event(
   if etype == 'set_paused':
     with shared.lock:
       shared.paused = bool(event.get('paused', False))
+      paused = shared.paused
+    _set_session_paused(session, paused)
     return False, False, True
 
   ram_events = {
       'quick_start': 'quick_start',
       'select_dim': '_set_selected_dim',
+      'apply_once': '_apply_selected_once',
       'apply_dim_value': '_apply_dim_value_from_web',
+      'persist_selected': '_persist_selected',
       'persist_dim_value': '_persist_dim_value_from_web',
       'clear_persistent': '_clear_all_persistent',
       'toggle_recording': '_toggle_recording',
       'export_now': '_flush_recording',
       'delete_recording': '_discard_recording',
+      'export_snapshot': '_export_ram_snapshot',
+      'clear_preview': '_clear_preview_from_web',
+      'adjust_preview': '_adjust_preview',
   }
   if etype in ram_events:
-    if etype not in {'toggle_recording', 'export_now', 'delete_recording'}:
+    if etype not in {'toggle_recording', 'export_now', 'delete_recording', 'export_snapshot'}:
       if not _ram_edit_allowed(session, shared):
         return False, False, True
     fn = getattr(session, ram_events[etype], None)
@@ -256,10 +276,27 @@ def _process_event(
         fn(int(event.get('dim', 0)), int(event.get('value', 0)))
       elif etype == 'export_now':
         fn('manual_export')
+      elif etype == 'export_snapshot':
+        fn('manual_snapshot')
+      elif etype == 'adjust_preview':
+        fn(int(event.get('delta', 0)))
       elif etype == 'delete_recording':
         fn()
       else:
         fn()
+    return False, False, True
+
+  if etype == 'set_preview_value':
+    if not _ram_edit_allowed(session, shared):
+      return False, False, True
+    fn = getattr(session, '_set_preview_from_web', None)
+    if callable(fn):
+      fn(int(event.get('value', 0)))
+    else:
+      if hasattr(session, '_preview_raw_value'):
+        session._preview_raw_value = int(event.get('value', 0))
+      if hasattr(session, '_value_entry'):
+        session._value_entry = str(event.get('value', ''))
     return False, False, True
 
   if etype == 'unpersist_dim':
@@ -276,6 +313,9 @@ def _process_event(
 def run_web_game_loop(args, session: PlaySession, shared: WebSharedState) -> None:
   keymap_ordered = build_keymap_ordered(session.keymap)
   session.reset()
+  with shared.lock:
+    shared.paused = bool(getattr(session, 'start_paused', False))
+  _set_session_paused(session, shared.paused)
   jpg, state = _render_state(args, session, shared)
   shared.set_frame(jpg, state)
 
@@ -354,6 +394,13 @@ def post_event():
 def handle_connect():
   if _shared is not None:
     _shared.clients += 1
+    if _session is not None:
+      socketio.emit('config', {
+          'env_id': getattr(_session, 'env_id', ''),
+          'focus_dims': list(getattr(_session, 'focus_dims', [])),
+          'signed_dims': list(getattr(_session, 'signed_dims', [])),
+          'action_names': list(getattr(_session, 'action_names', [])),
+      })
     if _shared.state:
       socketio.emit('state', _shared.state)
     if _shared.frame_jpeg:
@@ -402,8 +449,8 @@ def run_web_server(args, session: PlaySession) -> None:
   pub_thread = threading.Thread(target=frame_publisher, daemon=True)
   pub_thread.start()
 
-  host = getattr(args, 'web_host', '127.0.0.1')
-  port = int(getattr(args, 'web_port', 9876))
+  host = getattr(args, 'web_host', None) or getattr(args, 'host', '127.0.0.1')
+  port = int(getattr(args, 'web_port', None) or getattr(args, 'port', 9876))
   print(f'Web play server running at http://{host}:{port}')
   try:
     socketio.run(
