@@ -43,6 +43,7 @@ def print_remote_server_summary(
     stream_fps: int | None = None,
     size: int | None = None,
     jpeg_quality: int | None = None,
+    ram_panel: bool | None = None,
 ) -> None:
   """Print a compact startup summary shared by project adapters."""
 
@@ -56,6 +57,8 @@ def print_remote_server_summary(
     print(_line('wm backends', 'none'))
   if component_checkpoints:
     _print_checkpoint_group('components', component_checkpoints)
+  if ram_panel is not None:
+    print(_line('ram panel', _fmt_bool(ram_panel)))
   for key, value in extras:
     if value is not None and value != '':
       print(_line(str(key), str(value)))

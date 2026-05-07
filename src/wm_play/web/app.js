@@ -1,4 +1,4 @@
-const socket = io({ transports: ['websocket', 'polling'] });
+const socket = window.io ? io({ transports: ['websocket', 'polling'] }) : null;
 
 const els = {
   conn: document.getElementById('conn'),
@@ -49,7 +49,15 @@ const keyMap = {
 };
 
 function send(payload) {
-  socket.emit('event', payload);
+  if (socket) {
+    socket.emit('event', payload);
+    return;
+  }
+  fetch('/event', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).catch(() => {});
 }
 
 function pygameKey(event) {
@@ -154,22 +162,27 @@ async function fetchSnapshot() {
   }
 }
 
-socket.on('connect', () => {
-  els.conn.textContent = 'connected';
+if (socket) {
+  socket.on('connect', () => {
+    els.conn.textContent = 'connected';
+    els.conn.classList.add('connected');
+    fetchSnapshot();
+  });
+  socket.on('disconnect', () => {
+    els.conn.textContent = 'disconnected';
+    els.conn.classList.remove('connected');
+  });
+  socket.on('state', handleData);
+  socket.on('frame', handleData);
+} else {
+  els.conn.textContent = 'http polling';
   els.conn.classList.add('connected');
-  fetchSnapshot();
-});
-socket.on('disconnect', () => {
-  els.conn.textContent = 'disconnected';
-  els.conn.classList.remove('connected');
-});
-socket.on('state', handleData);
-socket.on('frame', handleData);
+}
 
 fetchSnapshot();
 setInterval(() => {
-  if (!lastFrameAt || Date.now() - lastFrameAt > 2000) fetchSnapshot();
-}, 1000);
+  if (!socket || !lastFrameAt || Date.now() - lastFrameAt > 2000) fetchSnapshot();
+}, 100);
 
 els.pause.onclick = () => send({ type: 'set_paused', paused: !latest.paused });
 els.step.onclick = () => send({ type: 'keydown', key: 101, mod: 0 });
