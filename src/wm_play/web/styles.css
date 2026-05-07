@@ -92,6 +92,10 @@ h2 {
   gap: 8px;
 }
 
+.right-stack {
+  align-content: start;
+}
+
 .panel,
 .game-card {
   border: 1px solid var(--line);
@@ -176,6 +180,14 @@ select:disabled {
   font-family: "IBM Plex Mono", "SFMono-Regular", "Menlo", monospace;
   font-size: 0.72rem;
   overflow-wrap: anywhere;
+}
+
+.record-panel {
+  align-self: start;
+}
+
+.record-actions {
+  justify-content: flex-start;
 }
 
 .transport {
