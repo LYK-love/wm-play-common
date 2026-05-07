@@ -26,6 +26,7 @@ const els = {
 
 let latest = {};
 let allRamOpen = false;
+let lastFrameAt = 0;
 
 const keyMap = {
   Backspace: 8,
@@ -134,14 +135,29 @@ function renderRam(data) {
 
 function handleData(data) {
   latest = { ...latest, ...data };
-  if (data.image) els.frame.src = `data:image/jpeg;base64,${data.image}`;
+  if (data.image) {
+    els.frame.src = `data:image/jpeg;base64,${data.image}`;
+    lastFrameAt = Date.now();
+  }
   renderStatus(latest);
   renderRam(latest);
+}
+
+async function fetchSnapshot() {
+  try {
+    const resp = await fetch('/snapshot', { cache: 'no-store' });
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (data.ready) handleData(data);
+  } catch (err) {
+    // SocketIO is the normal transport; this is only a first-frame fallback.
+  }
 }
 
 socket.on('connect', () => {
   els.conn.textContent = 'connected';
   els.conn.classList.add('connected');
+  fetchSnapshot();
 });
 socket.on('disconnect', () => {
   els.conn.textContent = 'disconnected';
@@ -149,6 +165,11 @@ socket.on('disconnect', () => {
 });
 socket.on('state', handleData);
 socket.on('frame', handleData);
+
+fetchSnapshot();
+setInterval(() => {
+  if (!lastFrameAt || Date.now() - lastFrameAt > 2000) fetchSnapshot();
+}, 1000);
 
 els.pause.onclick = () => send({ type: 'set_paused', paused: !latest.paused });
 els.step.onclick = () => send({ type: 'keydown', key: 101, mod: 0 });
