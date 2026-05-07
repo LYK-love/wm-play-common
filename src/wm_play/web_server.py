@@ -9,11 +9,13 @@ from collections import OrderedDict, deque
 from dataclasses import dataclass, field
 from typing import Any
 
+import numpy as np
 import pygame
 from flask import Flask, jsonify, request, send_from_directory
 from flask_socketio import SocketIO
 
 from .api import PlaySession
+from .recording import PlayRecorder
 
 
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'web')
@@ -36,6 +38,7 @@ class WebSharedState:
   target_fps: int = 15
   pressed_keys: set[int] = field(default_factory=set)
   events: deque[dict[str, Any]] = field(default_factory=deque)
+  recorder: PlayRecorder | None = None
   clients: int = 0
   lock: threading.Lock = field(default_factory=threading.Lock)
   cond: threading.Condition = field(init=False)
@@ -111,6 +114,13 @@ def _session_supports_ram(session: PlaySession) -> bool:
       getattr(session, '_read_rgb_frame', None))
 
 
+def _ram_capable(args, session: PlaySession) -> bool:
+  return (
+      bool(getattr(args, 'ram', False)) and
+      _session_supports_ram(session) and
+      _session_is_real_only(session))
+
+
 def _set_session_paused(session: PlaySession, paused: bool) -> None:
   fn = getattr(session, 'set_paused', None)
   if callable(fn):
@@ -144,10 +154,7 @@ def _render_state(
     paused = bool(shared.paused)
     fps = int(shared.target_fps)
 
-  ram_capable = (
-      bool(getattr(args, 'ram', False)) and
-      _session_supports_ram(session) and
-      _session_is_real_only(session))
+  ram_capable = _ram_capable(args, session)
   if ram_capable:
     frame = session._read_rgb_frame()
     from PIL import Image
@@ -172,6 +179,8 @@ def _render_state(
       'can_step_once': paused,
       'can_edit': paused and bool(state.get('ram_enabled')),
   })
+  if shared.recorder is not None:
+    state.update(shared.recorder.status())
   return _jpeg_from_pil(img, args.jpeg_quality), state
 
 
@@ -182,8 +191,60 @@ def _action_name(session: PlaySession, action: int) -> str:
   return str(action)
 
 
+def _record_frame(args, session: PlaySession, ram_capable: bool) -> np.ndarray:
+  if ram_capable and callable(getattr(session, '_read_rgb_frame', None)):
+    return np.asarray(session._read_rgb_frame(), dtype=np.uint8)
+  return np.asarray(session.render_frame(args.size, []).convert('RGB'), dtype=np.uint8)
+
+
+def _record_ram(session: PlaySession, state: dict[str, Any], ram_capable: bool):
+  if not ram_capable:
+    return None
+  ram = getattr(session, 'current_ram', None)
+  if ram is None:
+    ram = state.get('ram')
+  return None if ram is None else np.asarray(ram, dtype=np.uint8)
+
+
+def _record_metadata(session: PlaySession, state: dict[str, Any]) -> dict[str, Any]:
+  fn = getattr(session, 'record_metadata', None)
+  extra = fn() if callable(fn) else {}
+  return {
+      'env_id': state.get('env_id', getattr(session, 'env_id', '')),
+      'backend': state.get('backend', None),
+      'action_names': list(getattr(session, 'action_names', [])),
+      **(extra or {}),
+  }
+
+
+def _process_record_event(
+    etype: str,
+    args,
+    session: PlaySession,
+    shared: WebSharedState,
+) -> bool:
+  if shared.recorder is None:
+    return False
+  if etype not in {'toggle_recording', 'export_now', 'delete_recording', 'export_snapshot'}:
+    return False
+  _, state = _render_state(args, session, shared)
+  ram_capable = _ram_capable(args, session)
+  frame = _record_frame(args, session, ram_capable)
+  ram = _record_ram(session, state, ram_capable)
+  metadata = _record_metadata(session, state)
+  if etype == 'toggle_recording':
+    shared.recorder.toggle(frame, ram, metadata)
+  elif etype == 'export_now':
+    shared.recorder.export('manual_export')
+  elif etype == 'delete_recording':
+    shared.recorder.discard()
+  elif etype == 'export_snapshot':
+    shared.recorder.export_snapshot(state, ram, metadata, 'manual_snapshot')
+  return True
+
+
 def _process_event(
-    event: dict[str, Any], session: PlaySession, shared: WebSharedState
+    event: dict[str, Any], args, session: PlaySession, shared: WebSharedState
 ) -> tuple[bool, bool, bool]:
   etype = event.get('type')
   if etype == 'keydown':
@@ -202,6 +263,9 @@ def _process_event(
       return False, False, True
     if key == pygame.K_e:
       return False, True, False
+    if key == pygame.K_o:
+      _process_record_event('toggle_recording', args, session, shared)
+      return False, False, True
     if key == pygame.K_m:
       session.switch_controller()
       return False, False, True
@@ -249,6 +313,9 @@ def _process_event(
     _set_session_paused(session, paused)
     return False, False, True
 
+  if _process_record_event(etype, args, session, shared):
+    return False, False, True
+
   ram_events = {
       'quick_start': 'quick_start',
       'select_dim': '_set_selected_dim',
@@ -257,10 +324,6 @@ def _process_event(
       'persist_selected': '_persist_selected',
       'persist_dim_value': '_persist_dim_value_from_web',
       'clear_persistent': '_clear_all_persistent',
-      'toggle_recording': '_toggle_recording',
-      'export_now': '_flush_recording',
-      'delete_recording': '_discard_recording',
-      'export_snapshot': '_export_ram_snapshot',
       'clear_preview': '_clear_preview_from_web',
       'adjust_preview': '_adjust_preview',
   }
@@ -325,7 +388,7 @@ def run_web_game_loop(args, session: PlaySession, shared: WebSharedState) -> Non
     step_once = False
     needs_render = False
     for event in shared.dequeue_events():
-      reset_now, step_now, render_now = _process_event(event, session, shared)
+      reset_now, step_now, render_now = _process_event(event, args, session, shared)
       do_reset = do_reset or reset_now
       step_once = step_once or step_now
       needs_render = needs_render or render_now
@@ -348,6 +411,18 @@ def run_web_game_loop(args, session: PlaySession, shared: WebSharedState) -> Non
     human_action = resolve_action(shared.get_pressed_keys(), keymap_ordered)
     action = session.choose_action(human_action)
     result = session.step(action)
+    if shared.recorder is not None and shared.recorder.active:
+      ram_capable = _ram_capable(args, session)
+      _, state = _render_state(args, session, shared, action, result.info)
+      shared.recorder.record_step(
+          action,
+          result.reward,
+          result.done,
+          result.trunc,
+          _record_frame(args, session, ram_capable),
+          _record_ram(session, state, ram_capable))
+      if result.done or result.trunc:
+        shared.recorder.stop()
     if result.done or result.trunc:
       session.reset()
     jpg, state = _render_state(args, session, shared, action, result.info)
@@ -441,7 +516,11 @@ def frame_publisher():
 def run_web_server(args, session: PlaySession) -> None:
   global _shared, _session
   _session = session
-  _shared = WebSharedState(target_fps=max(1, int(args.fps)))
+  _shared = WebSharedState(
+      target_fps=max(1, int(args.fps)),
+      recorder=PlayRecorder(
+          getattr(args, 'export_dir', 'debug_outputs/wm_play_exports'),
+          video_fps=max(1, int(args.fps))))
 
   game_thread = threading.Thread(
       target=run_web_game_loop, args=(args, session, _shared), daemon=True)

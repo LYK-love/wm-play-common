@@ -162,6 +162,22 @@ select:disabled {
   color: var(--green);
 }
 
+.record-status {
+  color: var(--cyan);
+  font-family: "IBM Plex Mono", "SFMono-Regular", "Menlo", monospace;
+  font-size: 0.85rem;
+}
+
+.export-paths {
+  display: grid;
+  gap: 3px;
+  margin-top: 6px;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", "SFMono-Regular", "Menlo", monospace;
+  font-size: 0.72rem;
+  overflow-wrap: anywhere;
+}
+
 .transport {
   display: flex;
   flex-wrap: wrap;

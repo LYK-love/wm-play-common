@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Shared interactive play abstractions for action-conditioned world models."
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["pygame", "Pillow", "numpy", "flask", "flask-socketio"]
+dependencies = ["pygame", "Pillow", "numpy", "flask", "flask-socketio", "imageio"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
