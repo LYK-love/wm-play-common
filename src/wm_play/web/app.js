@@ -12,6 +12,12 @@ const els = {
   next: document.getElementById('next'),
   fps: document.getElementById('fps'),
   fpsValue: document.getElementById('fps-value'),
+  record: document.getElementById('record'),
+  export: document.getElementById('export'),
+  snapshot: document.getElementById('snapshot'),
+  deleteRecording: document.getElementById('delete-recording'),
+  recordStatus: document.getElementById('record-status'),
+  exportPaths: document.getElementById('export-paths'),
   statusLines: document.getElementById('status-lines'),
   ramPanel: document.getElementById('ram-panel'),
   ramWatch: document.getElementById('ram-watch'),
@@ -89,6 +95,29 @@ function renderStatus(data) {
   els.step.disabled = !data.paused;
   els.fps.value = String(data.fps || 15);
   els.fpsValue.textContent = String(data.fps || 15);
+  renderRecord(data);
+}
+
+function renderRecord(data) {
+  const recording = !!data.recording;
+  const pending = !!data.recording_pending;
+  const frames = data.record_frame_count || 0;
+  const actions = data.record_action_count || 0;
+  els.record.textContent = recording ? 'Stop' : 'Record';
+  els.export.disabled = recording || !pending;
+  els.deleteRecording.disabled = recording || !pending;
+  els.recordStatus.textContent = recording
+    ? `recording ${actions} steps`
+    : pending
+      ? `pending ${frames} frames`
+      : 'idle';
+  const paths = data.last_exported_paths || [];
+  els.exportPaths.innerHTML = '';
+  for (const path of paths) {
+    const div = document.createElement('div');
+    div.textContent = path;
+    els.exportPaths.appendChild(div);
+  }
 }
 
 function renderRam(data) {
@@ -195,6 +224,10 @@ els.fps.oninput = () => {
   els.fpsValue.textContent = String(fps);
   send({ type: 'set_fps', fps });
 };
+els.record.onclick = () => send({ type: 'toggle_recording' });
+els.export.onclick = () => send({ type: 'export_now' });
+els.snapshot.onclick = () => send({ type: 'export_snapshot' });
+els.deleteRecording.onclick = () => send({ type: 'delete_recording' });
 els.toggleAllRam.onclick = () => {
   allRamOpen = !allRamOpen;
   renderRam(latest);

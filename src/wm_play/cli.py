@@ -22,6 +22,8 @@ def add_remote_server_args(
                            'real-env-only sessions whose adapter exposes RAM.')
   parser.add_argument('--jpeg-quality', type=int, default=jpeg_quality_default,
                       help='JPEG quality for streamed frames, valid range [1, 95].')
+  parser.add_argument('--export-dir', type=str, default='debug_outputs/wm_play_exports',
+                      help='Directory for web play recordings and snapshots.')
   parser.add_argument('--web-host', type=str, default='127.0.0.1',
                       help='Web bind host.')
   parser.add_argument('--web-port', type=int, default=9876,

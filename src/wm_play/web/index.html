@@ -39,6 +39,24 @@
             <p class="hint">Keyboard: WASD/Space actions, Enter reset, . pause, E step, M controller, Left/Right backend, Up/Down horizon.</p>
           </section>
 
+          <section class="panel">
+            <div class="panel-title split">
+              <div>
+                <p class="eyebrow">Record</p>
+                <h2>Trajectory Export</h2>
+              </div>
+              <span id="record-status" class="record-status">idle</span>
+            </div>
+            <div class="transport">
+              <button id="record" class="btn btn-command">Record</button>
+              <button id="export" class="btn">Export</button>
+              <button id="snapshot" class="btn">Snapshot</button>
+              <button id="delete-recording" class="btn btn-danger">Delete</button>
+            </div>
+            <p class="hint">Exports include frames/actions/rewards/done/trunc; RAM mode also writes RAM arrays and RAM snapshots.</p>
+            <div id="export-paths" class="export-paths"></div>
+          </section>
+
           <section class="game-card">
             <div class="frame-wrap">
               <img id="frame" alt="game frame" />

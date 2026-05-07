@@ -20,15 +20,18 @@ info = result.info
 
 The web server owns the control loop, keyboard handling, pause/reset/step,
 server-side FPS control, JPEG frame streaming, and optional generic RAM panel
-plumbing. Project adapters still own model/env semantics. For example, the
-Arcade-Learning-Environment adapter provides Pong-specific RAM slot names,
-quick-start behavior, recording, and export hooks.
+plumbing. It also owns trajectory recording/export: frames, actions, rewards,
+done/trunc flags, metadata, and RAM arrays when RAM mode is active. Project
+adapters still own model/env semantics. For example, the
+Arcade-Learning-Environment adapter provides Pong-specific RAM slot names and
+quick-start behavior.
 
 ## Provides
 
 - `wm_play.api`: `GameEnv`, `RenderableGameEnv`, `PlaySession`, `StepResult`
 - `wm_play.session`: generic session wrapper for simple step-style envs
 - `wm_play.web_server`: Flask/SocketIO browser UI and server-side game loop
+- `wm_play.recording`: generic trajectory recorder and exporter
 - `wm_play.cli`: shared play CLI flags
 - `wm_play.server_summary`: compact startup summary formatting
 
@@ -56,8 +59,7 @@ used.
 
 The common layer treats RAM as editable byte slots plus optional adapter hooks.
 It does not define game-specific RAM meanings. Slot labels, focused dimensions,
-recording/export behavior, and convenience actions such as Pong serve setup
-belong in the project adapter.
+and convenience actions such as Pong serve setup belong in the project adapter.
 
 ## Layout
 
