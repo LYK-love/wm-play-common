@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import pygame
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory
 from flask_socketio import SocketIO
 
 from .api import PlaySession
@@ -338,6 +338,13 @@ def snapshot():
       'image': base64.b64encode(jpg).decode('utf-8'),
       **state,
   })
+
+
+@app.route('/event', methods=['POST'])
+def post_event():
+  if _shared is not None:
+    _shared.enqueue_event(request.get_json(silent=True) or {})
+  return jsonify({'ok': True})
 
 
 @socketio.on('connect')
