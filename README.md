@@ -29,8 +29,20 @@ server-side FPS control, JPEG frame streaming, and optional RAM panel plumbing.
 - `wm_play.cli`: shared play CLI flags
 - `wm_play.server_summary`: compact startup summary formatting
 
-There is no pygame/native client. The local machine only needs a browser and,
-when connecting to a remote server, SSH port forwarding.
+There is no pygame/native client. The client side is always a browser:
+
+```bash
+ssh -N -L 9876:127.0.0.1:9876 <ssh-host>
+```
+
+Then open `http://127.0.0.1:9876`.
+
+If the browser runs on the same machine as the server, skip SSH and open the
+server URL directly, for example `http://127.0.0.1:9876`.
+
+The client machine does not need the model project's conda environment, model
+frameworks, CUDA, checkpoints, or `wm-play-common`; all model/env code runs on
+the server.
 
 ## Layout
 
