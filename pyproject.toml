@@ -14,4 +14,4 @@ dependencies = ["pygame", "Pillow", "numpy", "flask", "flask-socketio"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-wm_play = ["web/*"]
+wm_play = ["web/*", "web/vendor/*"]
