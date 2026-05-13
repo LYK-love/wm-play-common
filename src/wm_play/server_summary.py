@@ -37,6 +37,7 @@ def print_remote_server_summary(
     client_command: str,
     real_env: bool = True,
     wm_checkpoints: Sequence[CheckpointEntry] = (),
+    policy_checkpoints: Sequence[CheckpointEntry] = (),
     component_checkpoints: Sequence[CheckpointEntry] = (),
     extras: Iterable[tuple[str, object]] = (),
     fps: int | None = None,
@@ -57,6 +58,8 @@ def print_remote_server_summary(
     print(_line('wm backends', 'none'))
   if component_checkpoints:
     _print_checkpoint_group('components', component_checkpoints)
+  if policy_checkpoints:
+    _print_checkpoint_group('policies', policy_checkpoints)
   if ram_panel is not None:
     print(_line('ram panel', _fmt_bool(ram_panel)))
   for key, value in extras:

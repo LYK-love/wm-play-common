@@ -14,6 +14,28 @@ class StepResult:
   info: dict[str, Any]
 
 
+@dataclass
+class PolicyAction:
+  action: Any
+  info: dict[str, Any] | None = None
+
+
+class PixelPolicy(Protocol):
+  """Pixel-space policy interface for wm-play.
+
+  Latent-space projects should do their encoder/RSSM work inside ``act()`` so
+  the outer game loop can stay at ``act = policy(obs)``.
+  """
+
+  name: str
+
+  def reset(self) -> None:
+    ...
+
+  def act(self, obs: Any) -> PolicyAction:
+    ...
+
+
 class GameEnv(ABC):
   name: str
 

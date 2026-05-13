@@ -18,6 +18,18 @@ trunc = result.trunc
 info = result.info
 ```
 
+Policy controllers use a pixel-space interface:
+
+```python
+result = policy.act(obs)
+action = result.action
+```
+
+Projects with latent-space actors should hide their encoder/transition-model
+work inside `act()`. The common loop still sees only pixels in and actions out.
+Human control remains available, and adapters can register one or more named
+policies for controller cycling.
+
 The web server owns the control loop, keyboard handling, pause/reset/step,
 server-side FPS control, JPEG frame streaming, and optional generic RAM panel
 plumbing. It also owns trajectory recording/export: frames, actions, rewards,
@@ -28,7 +40,7 @@ quick-start behavior.
 
 ## Provides
 
-- `wm_play.api`: `GameEnv`, `RenderableGameEnv`, `PlaySession`, `StepResult`
+- `wm_play.api`: `GameEnv`, `RenderableGameEnv`, `PlaySession`, `StepResult`, `PixelPolicy`, `PolicyAction`
 - `wm_play.session`: generic session wrapper for simple step-style envs
 - `wm_play.web_server`: Flask/SocketIO browser UI and server-side game loop
 - `wm_play.recording`: generic trajectory recorder and exporter
