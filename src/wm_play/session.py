@@ -7,18 +7,7 @@ import numpy as np
 from PIL import Image
 
 from .api import GameEnv, PixelPolicy, PlaySession, StepResult
-
-
-def _fmt_scalar(value: Any) -> str:
-  if value is None:
-    return '-'
-  try:
-    value = float(value)
-  except Exception:
-    return str(value)
-  if abs(value - round(value)) < 1e-6:
-    return str(int(round(value)))
-  return f'{value:.2f}'
+from .status import play_status_lines
 
 
 def _action_to_int(action: Any) -> int:
@@ -95,6 +84,10 @@ class EnvPlaySession(PlaySession):
     return self.envs[self.current_index].name
 
   @property
+  def current_kind(self) -> str:
+    return 'model' if self.horizon is not None else 'real'
+
+  @property
   def horizon(self) -> int | None:
     value = getattr(self.current_env, 'horizon', None)
     if value is None:
@@ -161,21 +154,22 @@ class EnvPlaySession(PlaySession):
 
   def header(self, action: int, info: dict[str, Any]) -> list[str]:
     info = info if isinstance(info, dict) else {}
-    reward = info.get('reward')
-    ret = info.get('return')
-    step = info.get('step', info.get('steps', 0))
     action_name = info.get('action_name')
     action_idx = _action_to_int(action)
     if action_name is None:
       action_name = self.action_names[action_idx] if 0 <= action_idx < len(self.action_names) else str(action_idx)
-    lines = [
-        f'Env    : {self.current_index + 1}/{len(self.envs)} ({self.current_name})',
-        f'Step   : {step}',
-        f'Reward : {_fmt_scalar(reward)}',
-        f'Return : {_fmt_scalar(ret)}',
-        f'Action : {action_name}',
-    ]
-    return lines
+    status = {
+        'env_name': self.current_name,
+        'env_kind': self.current_kind,
+        'control': info.get('control', 'policy' if self.controller_index > 0 else 'human'),
+        'step': info.get('step', info.get('steps', 0)),
+        'reward': info.get('reward'),
+        'return': info.get('return'),
+        'action_name': action_name,
+        'done': info.get('done'),
+        'trunc': info.get('trunc'),
+    }
+    return play_status_lines(status, info.get('status_extras'))
 
   def render_frame(self, size: int, header_lines: list[str]):
     render = getattr(self.current_env, 'render_frame', None)

@@ -46,10 +46,21 @@ backends expose `horizon` and `set_horizon(...)`; the common web layer resets
 the current game after a horizon change so backend state and UI state stay
 consistent.
 
+The common browser status panel is rendered by `wm_play.status`. Project
+adapters should pass facts through `info["play_status"]` instead of formatting
+their own UI strings. The shared fields are `env_name`, `env_kind`,
+`control`, `step`, `reward`, `return`, `action_name`, `done`, and `trunc`.
+Adapters can add a small number of project-specific lines through
+`info["status_extras"]`, for example an OC-STORM KV-cache indicator. Horizon is
+intentionally not part of these status lines because the shared toolbar already
+has a horizon control.
+
 ## Provides
 
 - `wm_play.api`: `GameEnv`, `RenderableGameEnv`, `PlaySession`, `PixelPolicy`,
   `PolicyAction`, `StepResult`
+- `wm_play.status`: shared play status formatting for the browser and legacy
+  pygame headers
 - `wm_play.session`: generic session wrapper for simple step-style envs
 - `wm_play.web_server`: Flask/SocketIO browser UI and server-side game loop
 - `wm_play.recording`: generic trajectory recorder and exporter

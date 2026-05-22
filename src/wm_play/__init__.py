@@ -10,6 +10,7 @@ from .api import (
     RenderableGameEnv,
     StepResult,
 )
+from .status import play_status_columns, play_status_lines
 
 __all__ = [
     'GameEnv',
@@ -18,4 +19,6 @@ __all__ = [
     'PolicyAction',
     'RenderableGameEnv',
     'StepResult',
+    'play_status_columns',
+    'play_status_lines',
 ]
