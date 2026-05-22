@@ -49,6 +49,35 @@ def add_pixel_policy_args(parser: argparse.ArgumentParser) -> argparse.ArgumentP
   return parser
 
 
+def add_world_model_checkpoint_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+  """Add generic world-model backend checkpoint flags.
+
+  Projects are responsible for loading checkpoint formats and constructing
+  pixel-space ``GameEnv`` backends from them.
+  """
+  parser.add_argument('--wm-checkpoint', action='append', default=[],
+                      help='Repeatable world-model checkpoint path. Each value '
+                           'adds one selectable WM backend.')
+  parser.add_argument('--wm-name', action='append', default=[],
+                      help='Optional repeatable WM display name. If omitted, '
+                           'the name is inferred from the WM checkpoint path.')
+  return parser
+
+
+def add_play_checkpoint_args(
+    parser: argparse.ArgumentParser,
+    *,
+    include_wm: bool = True,
+    include_policy: bool = True,
+) -> argparse.ArgumentParser:
+  """Add the shared checkpoint-selection CLI for browser play tools."""
+  if include_wm:
+    add_world_model_checkpoint_args(parser)
+  if include_policy:
+    add_pixel_policy_args(parser)
+  return parser
+
+
 def validate_remote_server_args(args) -> None:
   if not (1 <= args.jpeg_quality <= 95):
     raise SystemExit('--jpeg-quality must be in [1, 95].')

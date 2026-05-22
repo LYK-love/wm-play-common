@@ -56,6 +56,11 @@ consistent.
 - `wm_play.cli`: shared play CLI flags
 - `wm_play.server_summary`: compact startup summary formatting
 
+The shared CLI helpers define common browser-play flags such as
+`--wm-checkpoint`, `--wm-name`, `--policy-checkpoint`, and `--policy-name`.
+Projects still own checkpoint loading, but user-facing commands should use
+these names consistently across adapters.
+
 There is no pygame/native client. The client side is always a browser:
 
 ```bash
