@@ -7,7 +7,7 @@ construction, latent rollout, rendering, and policy integration.
 
 ## Contract
 
-Adapters expose a `PlaySession` with the usual step semantics:
+Adapters expose a pixel-space `PlaySession` with Gym-style step semantics:
 
 ```python
 result = session.step(action)
@@ -18,17 +18,38 @@ trunc = result.trunc
 info = result.info
 ```
 
+`result.obs` must be renderable pixels, or a dict containing renderable pixel
+observations. Latent world models must keep encoder/RSSM/transformer state
+inside the adapter and decode every displayed observation back to pixel space.
+The common loop should be able to treat real envs and WMs as:
+
+```python
+next_o, next_r, done, trunc, info = env.step(current_act)
+```
+
+Policies plugged into the tool follow the same boundary. A `PixelPolicy` sees
+pixel observations from the current backend and returns an action; latent
+policies can do their own encoding internally, but the shared play layer never
+depends on latent tensors.
+
 The web server owns the control loop, keyboard handling, pause/reset/step,
-server-side FPS control, JPEG frame streaming, and optional generic RAM panel
-plumbing. It also owns trajectory recording/export: frames, actions, rewards,
-done/trunc flags, metadata, and RAM arrays when RAM mode is active. Project
-adapters still own model/env semantics. For example, the
-Arcade-Learning-Environment adapter provides Pong-specific RAM slot names and
-quick-start behavior.
+backend switching, policy/controller switching, server-side FPS control, WM
+horizon edits, JPEG frame streaming, and optional generic RAM panel plumbing.
+It also owns trajectory recording/export: frames, actions, rewards, done/trunc
+flags, metadata, and RAM arrays when RAM mode is active. Project adapters still
+own model/env semantics. For example, an Atari adapter provides Pong-specific
+RAM slot names and quick-start behavior.
+
+`session.horizon is None` means the active backend has no finite WM rollout
+horizon, which is how real-env backends are shown in the UI (`∞`). Finite WM
+backends expose `horizon` and `set_horizon(...)`; the common web layer resets
+the current game after a horizon change so backend state and UI state stay
+consistent.
 
 ## Provides
 
-- `wm_play.api`: `GameEnv`, `RenderableGameEnv`, `PlaySession`, `StepResult`
+- `wm_play.api`: `GameEnv`, `RenderableGameEnv`, `PlaySession`, `PixelPolicy`,
+  `PolicyAction`, `StepResult`
 - `wm_play.session`: generic session wrapper for simple step-style envs
 - `wm_play.web_server`: Flask/SocketIO browser UI and server-side game loop
 - `wm_play.recording`: generic trajectory recorder and exporter

@@ -10,8 +10,11 @@ const els = {
   controller: document.getElementById('controller'),
   prev: document.getElementById('prev'),
   next: document.getElementById('next'),
+  prevPolicy: document.getElementById('prev-policy'),
+  nextPolicy: document.getElementById('next-policy'),
   fps: document.getElementById('fps'),
   fpsValue: document.getElementById('fps-value'),
+  horizon: document.getElementById('horizon'),
   record: document.getElementById('record'),
   export: document.getElementById('export'),
   snapshot: document.getElementById('snapshot'),
@@ -72,6 +75,15 @@ function pygameKey(event) {
   return null;
 }
 
+function pygameMod(event) {
+  let mod = 0;
+  if (event.shiftKey) mod |= 3;
+  if (event.ctrlKey) mod |= 192;
+  if (event.altKey) mod |= 768;
+  if (event.metaKey) mod |= 3072;
+  return mod;
+}
+
 function isInputLike(target) {
   return target instanceof HTMLInputElement ||
     target instanceof HTMLTextAreaElement ||
@@ -95,6 +107,11 @@ function renderStatus(data) {
   els.step.disabled = !data.paused;
   els.fps.value = String(data.fps || 15);
   els.fpsValue.textContent = String(data.fps || 15);
+  const horizonEditable = !!data.horizon_editable;
+  els.horizon.disabled = !horizonEditable;
+  if (document.activeElement !== els.horizon) {
+    els.horizon.value = data.horizon_display || '';
+  }
   renderRecord(data);
 }
 
@@ -219,10 +236,27 @@ els.reset.onclick = () => send({ type: 'keydown', key: 13, mod: 0 });
 els.controller.onclick = () => send({ type: 'keydown', key: 109, mod: 0 });
 els.prev.onclick = () => send({ type: 'keydown', key: 1073741904, mod: 0 });
 els.next.onclick = () => send({ type: 'keydown', key: 1073741903, mod: 0 });
+els.prevPolicy.onclick = () => send({ type: 'switch_policy', direction: -1 });
+els.nextPolicy.onclick = () => send({ type: 'switch_policy', direction: 1 });
 els.fps.oninput = () => {
   const fps = Number.parseInt(els.fps.value, 10);
   els.fpsValue.textContent = String(fps);
   send({ type: 'set_fps', fps });
+};
+function commitHorizon() {
+  if (els.horizon.disabled) return;
+  const horizon = Number.parseInt(els.horizon.value, 10);
+  if (Number.isFinite(horizon) && horizon >= 1) {
+    send({ type: 'set_horizon', horizon });
+  }
+}
+els.horizon.onchange = commitHorizon;
+els.horizon.onkeydown = (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    commitHorizon();
+    els.horizon.blur();
+  }
 };
 els.record.onclick = () => send({ type: 'toggle_recording' });
 els.export.onclick = () => send({ type: 'export_now' });
@@ -247,11 +281,11 @@ window.addEventListener('keydown', (event) => {
   if ([' ', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
     event.preventDefault();
   }
-  send({ type: 'keydown', key, mod: 0 });
+  send({ type: 'keydown', key, mod: pygameMod(event) });
 });
 window.addEventListener('keyup', (event) => {
   if (isInputLike(event.target)) return;
   const key = pygameKey(event);
   if (key === null) return;
-  send({ type: 'keyup', key, mod: 0 });
+  send({ type: 'keyup', key, mod: pygameMod(event) });
 });

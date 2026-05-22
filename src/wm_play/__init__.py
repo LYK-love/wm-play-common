@@ -1,10 +1,21 @@
-"""Shared interactive play framework for real envs and world models.
+"""Shared interactive play framework for real envs and world models."""
 
-Import concrete modules directly, for example:
+from __future__ import annotations
 
-  from wm_play.api import GameEnv, StepResult
-  from wm_play.cli import add_remote_server_args
+from .api import (
+    GameEnv,
+    PixelPolicy,
+    PlaySession,
+    PolicyAction,
+    RenderableGameEnv,
+    StepResult,
+)
 
-The package initializer intentionally avoids eager imports so lightweight clients
-only need their actual runtime dependencies.
-"""
+__all__ = [
+    'GameEnv',
+    'PixelPolicy',
+    'PlaySession',
+    'PolicyAction',
+    'RenderableGameEnv',
+    'StepResult',
+]

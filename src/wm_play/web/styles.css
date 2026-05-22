@@ -197,12 +197,20 @@ select:disabled {
   align-items: center;
 }
 
-.speed {
+.speed,
+.horizon-control {
   display: grid;
-  grid-template-columns: auto 140px 32px;
   gap: 8px;
   align-items: center;
+}
+
+.speed {
+  grid-template-columns: auto 140px 32px;
   margin-left: auto;
+}
+
+.horizon-control {
+  grid-template-columns: auto 72px;
 }
 
 .frame-wrap {

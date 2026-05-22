@@ -11,3 +11,21 @@ import pathlib
 
 _pkg = pathlib.Path(__file__).resolve().parent / 'src' / 'wm_play'
 __path__ = [str(_pkg)]
+
+from .api import (  # noqa: E402
+    GameEnv,
+    PixelPolicy,
+    PlaySession,
+    PolicyAction,
+    RenderableGameEnv,
+    StepResult,
+)
+
+__all__ = [
+    'GameEnv',
+    'PixelPolicy',
+    'PlaySession',
+    'PolicyAction',
+    'RenderableGameEnv',
+    'StepResult',
+]

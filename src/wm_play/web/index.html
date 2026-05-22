@@ -30,13 +30,19 @@
               <button id="controller" class="btn">Controller</button>
               <button id="prev" class="btn">Prev Backend</button>
               <button id="next" class="btn">Next Backend</button>
+              <button id="prev-policy" class="btn">Prev Policy</button>
+              <button id="next-policy" class="btn">Next Policy</button>
               <div class="speed">
                 <label for="fps">FPS</label>
                 <input id="fps" type="range" min="1" max="60" value="15" />
                 <span id="fps-value">15</span>
               </div>
+              <div class="horizon-control">
+                <label for="horizon">Horizon</label>
+                <input id="horizon" type="text" inputmode="numeric" placeholder="∞" />
+              </div>
             </div>
-            <p class="hint">Keyboard: WASD/Space actions, Enter reset, . pause, E step, M controller, Left/Right backend, Up/Down horizon.</p>
+            <p class="hint">Keyboard: WASD/Space actions, Enter reset, . pause, E step, M controller, Left/Right backend, Shift+Left/Right policy, Up/Down horizon.</p>
           </section>
 
           <section class="game-card">

@@ -6,7 +6,7 @@ from typing import Any, Callable
 import numpy as np
 from PIL import Image
 
-from .api import GameEnv, PlaySession, StepResult
+from .api import GameEnv, PixelPolicy, PlaySession, StepResult
 
 
 def _fmt_scalar(value: Any) -> str:
@@ -72,6 +72,7 @@ class EnvPlaySession(PlaySession):
       action_names: list[str],
       keymap: dict[tuple[int, ...], int],
       render_fn: Callable[[Any, int], Image.Image] | None = None,
+      policies: list[PixelPolicy] | None = None,
   ) -> None:
     if not envs:
       raise ValueError('EnvPlaySession requires at least one env.')
@@ -79,6 +80,8 @@ class EnvPlaySession(PlaySession):
     self.action_names = list(action_names)
     self.keymap = dict(keymap)
     self.render_fn = render_fn
+    self.policies = list(policies or [])
+    self.controller_index = 0
     self.current_index = 0
     self.current_obs = None
     self.last_info: dict[str, Any] = {}
@@ -91,8 +94,22 @@ class EnvPlaySession(PlaySession):
   def current_name(self) -> str:
     return self.envs[self.current_index].name
 
+  @property
+  def horizon(self) -> int | None:
+    value = getattr(self.current_env, 'horizon', None)
+    if value is None:
+      return None
+    try:
+      return int(value)
+    except (TypeError, ValueError):
+      return None
+
   def reset(self) -> None:
     self.current_obs, self.last_info = self.current_env.reset()
+    for policy in self.policies:
+      reset = getattr(policy, 'reset', None)
+      if callable(reset):
+        reset()
 
   def switch_backend(self, direction: int) -> None:
     if len(self.envs) <= 1:
@@ -101,14 +118,35 @@ class EnvPlaySession(PlaySession):
     self.reset()
 
   def switch_controller(self) -> None:
-    return
+    if self.policies:
+      self.controller_index = (self.controller_index + 1) % (1 + len(self.policies))
 
   def adjust_horizon(self, delta: int) -> None:
     update = getattr(self.current_env, 'adjust_horizon', None)
     if callable(update):
       update(delta)
 
+  def set_horizon(self, horizon: int) -> None:
+    update = getattr(self.current_env, 'set_horizon', None)
+    if callable(update):
+      update(horizon)
+      return
+    current = getattr(self.current_env, 'horizon', None)
+    if current is not None:
+      try:
+        setattr(self.current_env, 'horizon', max(1, int(horizon)))
+        return
+      except (AttributeError, TypeError, ValueError):
+        pass
+      try:
+        self.adjust_horizon(int(horizon) - int(current))
+      except (TypeError, ValueError):
+        pass
+
   def choose_action(self, human_action: int) -> int:
+    if self.controller_index > 0 and self.policies:
+      result = self.policies[self.controller_index - 1].act(self.current_obs)
+      return _action_to_int(result.action)
     policy = getattr(self.current_env, 'choose_action', None)
     if callable(policy):
       return policy(human_action)

@@ -2,14 +2,23 @@ from __future__ import annotations
 
 import base64
 import io
+import logging
 import os
 import threading
 import time
+import warnings
 from collections import OrderedDict, deque
 from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
+
+os.environ.setdefault('PYGAME_HIDE_SUPPORT_PROMPT', '1')
+warnings.filterwarnings(
+    'ignore',
+    message='pkg_resources is deprecated as an API.*',
+    category=UserWarning,
+)
 import pygame
 from flask import Flask, jsonify, request, send_from_directory
 from flask_socketio import SocketIO
@@ -26,6 +35,28 @@ _shared: WebSharedState | None = None
 _session: PlaySession | None = None
 
 ACTION_KEYS = {pygame.K_w, pygame.K_a, pygame.K_s, pygame.K_d, pygame.K_SPACE}
+
+
+def _action_to_int(action: Any) -> int:
+  try:
+    arr = np.asarray(action).reshape(-1)
+    if arr.size:
+      return int(arr[0])
+  except Exception:
+    pass
+  try:
+    return int(action)
+  except Exception:
+    return 0
+
+
+def _has_items(value: Any) -> bool:
+  if value is None:
+    return False
+  try:
+    return len(value) > 0
+  except TypeError:
+    return bool(value)
 
 
 @dataclass
@@ -162,7 +193,7 @@ def _render_state(
     img = Image.fromarray(frame, mode='RGB').resize(
         (args.size, args.size), resample=Image.NEAREST)
     state = dict(session.get_web_state())
-    state['ram_enabled'] = bool(state.get('all_dims') or state.get('focus_dims'))
+    state['ram_enabled'] = _has_items(state.get('all_dims')) or _has_items(state.get('focus_dims'))
   else:
     header = [] if getattr(args, 'no_header', False) else session.header(action, info)
     img = session.render_frame(args.size, [])
@@ -173,9 +204,14 @@ def _render_state(
         'last_action_name': _action_name(session, action),
     }
 
+  horizon = _session_horizon(session)
+  horizon_editable = horizon is not None
   state.update({
       'paused': paused,
       'fps': fps,
+      'horizon': horizon,
+      'horizon_display': str(horizon) if horizon_editable else '∞',
+      'horizon_editable': horizon_editable,
       'can_step_once': paused,
       'can_edit': paused and bool(state.get('ram_enabled')),
   })
@@ -186,9 +222,10 @@ def _render_state(
 
 def _action_name(session: PlaySession, action: int) -> str:
   names = getattr(session, 'action_names', [])
-  if 0 <= int(action) < len(names):
-    return str(names[int(action)])
-  return str(action)
+  action_idx = _action_to_int(action)
+  if 0 <= action_idx < len(names):
+    return str(names[action_idx])
+  return str(action_idx)
 
 
 def _record_frame(args, session: PlaySession, ram_capable: bool) -> np.ndarray:
@@ -215,6 +252,50 @@ def _record_metadata(session: PlaySession, state: dict[str, Any]) -> dict[str, A
       'action_names': list(getattr(session, 'action_names', [])),
       **(extra or {}),
   }
+
+
+def _session_horizon(session: PlaySession) -> int | None:
+  value = getattr(session, 'horizon', None)
+  if value is not None:
+    try:
+      return int(value)
+    except (TypeError, ValueError):
+      pass
+  env = getattr(session, 'current_env', None)
+  value = getattr(env, 'horizon', None)
+  if value is not None:
+    try:
+      return int(value)
+    except (TypeError, ValueError):
+      pass
+  current_backend_index = getattr(session, 'current_backend_index', None)
+  if current_backend_index == 0:
+    return None
+  value = getattr(session, 'policy_context_length', None)
+  if value is not None:
+    try:
+      return int(value)
+    except (TypeError, ValueError):
+      pass
+  return None
+
+
+def _set_session_horizon(session: PlaySession, horizon: int) -> bool:
+  horizon = max(1, int(horizon))
+  current = _session_horizon(session)
+  if current is None:
+    return False
+  if horizon == current:
+    return False
+  setter = getattr(session, 'set_horizon', None)
+  if callable(setter):
+    setter(horizon)
+    return True
+  adjust = getattr(session, 'adjust_horizon', None)
+  if callable(adjust):
+    adjust(horizon - current)
+    return True
+  return False
 
 
 def _process_record_event(
@@ -270,16 +351,32 @@ def _process_event(
       session.switch_controller()
       return False, False, True
     if key == pygame.K_RIGHT:
+      if mod & pygame.KMOD_SHIFT:
+        switch_policy = getattr(session, 'switch_policy', None)
+        if callable(switch_policy):
+          switch_policy(+1)
+        return False, False, True
       session.switch_backend(+1)
       return False, False, True
     if key == pygame.K_LEFT:
+      if mod & pygame.KMOD_SHIFT:
+        switch_policy = getattr(session, 'switch_policy', None)
+        if callable(switch_policy):
+          switch_policy(-1)
+        return False, False, True
       session.switch_backend(-1)
       return False, False, True
     if key == pygame.K_UP:
-      session.adjust_horizon(+1)
+      current_horizon = _session_horizon(session)
+      if current_horizon is not None:
+        if _set_session_horizon(session, current_horizon + 1):
+          session.reset()
       return False, False, True
     if key == pygame.K_DOWN:
-      session.adjust_horizon(-1)
+      current_horizon = _session_horizon(session)
+      if current_horizon is not None:
+        if _set_session_horizon(session, current_horizon - 1):
+          session.reset()
       return False, False, True
     if key in {pygame.K_MINUS, pygame.K_KP_MINUS}:
       with shared.lock:
@@ -306,11 +403,29 @@ def _process_event(
       shared.target_fps = max(1, min(120, int(event.get('fps', 15))))
     return False, False, True
 
+  if etype == 'set_horizon':
+    try:
+      if _set_session_horizon(session, int(event.get('horizon', 1))):
+        session.reset()
+    except (TypeError, ValueError):
+      pass
+    return False, False, True
+
   if etype == 'set_paused':
     with shared.lock:
       shared.paused = bool(event.get('paused', False))
       paused = shared.paused
     _set_session_paused(session, paused)
+    return False, False, True
+
+  if etype == 'switch_backend':
+    session.switch_backend(int(event.get('direction', 1)))
+    return False, False, True
+
+  if etype == 'switch_policy':
+    switch_policy = getattr(session, 'switch_policy', None)
+    if callable(switch_policy):
+      switch_policy(int(event.get('direction', 1)))
     return False, False, True
 
   if _process_record_event(etype, args, session, shared):
@@ -415,7 +530,7 @@ def run_web_game_loop(args, session: PlaySession, shared: WebSharedState) -> Non
       ram_capable = _ram_capable(args, session)
       _, state = _render_state(args, session, shared, action, result.info)
       shared.recorder.record_step(
-          action,
+          _action_to_int(action),
           result.reward,
           result.done,
           result.trunc,
@@ -530,6 +645,12 @@ def run_web_server(args, session: PlaySession) -> None:
 
   host = getattr(args, 'web_host', None) or getattr(args, 'host', '127.0.0.1')
   port = int(getattr(args, 'web_port', None) or getattr(args, 'port', 9876))
+  logging.getLogger('werkzeug').setLevel(logging.ERROR)
+  try:
+    from flask import cli as flask_cli
+    flask_cli.show_server_banner = lambda *args, **kwargs: None
+  except Exception:
+    pass
   print(f'Web play server running at http://{host}:{port}')
   try:
     socketio.run(
