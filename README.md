@@ -40,6 +40,18 @@ flags, metadata, and RAM arrays when RAM mode is active. Project adapters still
 own model/env semantics. For example, an Atari adapter provides Pong-specific
 RAM slot names and quick-start behavior.
 
+Browser play always opens on the real environment with human control:
+
+```text
+backend    = real
+controller = human
+```
+
+World-model backends and policy controllers may be loaded at startup, but they
+must be additional selectable modes. Users switch to them live through the
+shared backend/controller controls. CLI compatibility flags such as
+`--controller` must not change the initial browser state.
+
 `session.horizon is None` means the active backend has no finite WM rollout
 horizon, which is how real-env backends are shown in the UI (`∞`). Finite WM
 backends expose `horizon` and `set_horizon(...)`; the common web layer resets
@@ -47,13 +59,55 @@ the current game after a horizon change so backend state and UI state stay
 consistent.
 
 The common browser status panel is rendered by `wm_play.status`. Project
-adapters should pass facts through `info["play_status"]` instead of formatting
-their own UI strings. The shared fields are `env_name`, `env_kind`,
-`control`, `step`, `reward`, `return`, `action_name`, `done`, and `trunc`.
-Adapters can add a small number of project-specific lines through
+adapters should pass facts through `info["play_status"]` or `StepResult.info`
+instead of formatting their own UI strings. The shared fields are `env_name`,
+`env_kind`, `control`, `step`, `reward`, `return`, `action_name`,
+`terminal`/`term`/`is_terminal`, `continuation`/`cont_prob`/`cont`, `done`, and
+`trunc`. The panel always displays reward and a termination-related signal.
+Projects that predict terminal should pass `terminal`; projects that predict
+continuation should pass `continuation` or `cont_prob`, which is shown as
+`Cont`. Adapters can add a small number of project-specific lines through
 `info["status_extras"]`, for example an OC-STORM KV-cache indicator. Horizon is
 intentionally not part of these status lines because the shared toolbar already
 has a horizon control.
+
+## Output Contract
+
+All remote play servers should use `wm_play.server_summary` for shared terminal
+output. Startup output begins with:
+
+```text
+Remote play server
+  project     : <project>
+  controller  : <controller>
+  real env    : enabled|disabled
+  wm backends : N checkpoint(s)|none
+    1. <name>: <path>
+  components  : N checkpoint(s)
+    1. <name>: <path>
+  policies    : N checkpoint(s)
+    1. <name>: <path>
+  ram panel   : enabled|disabled
+  <extra>     : <value>
+  render      : loop=<fps>fps, stream=<fps>fps, size=<px>, jpeg=<quality>
+  listen      : <host>:<port>
+  web         : open http://<server-ip>:<port>
+```
+
+Only print sections that apply. Project-specific diagnostics, such as model
+loading messages, may appear before the summary. Shared play-server state
+should keep the format above.
+
+Runtime events use:
+
+```text
+> backend     : <name>[<index>/<count>]
+> controller  : <name>
+> policy      : <index>/<count> (<name>)
+> wm horizon  : <steps>|none
+```
+
+Use `print_runtime_event(label, value)` instead of hand-formatting these lines.
 
 ## Provides
 

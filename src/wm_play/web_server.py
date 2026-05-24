@@ -180,7 +180,10 @@ def _render_state(
     action: int = 0,
     info: dict[str, Any] | None = None,
 ) -> tuple[bytes, dict[str, Any]]:
-  info = info or {}
+  if info is None:
+    info = getattr(session, 'last_info', {}) or {}
+  else:
+    info = info or {}
   with shared.lock:
     paused = bool(shared.paused)
     fps = int(shared.target_fps)
@@ -651,7 +654,7 @@ def run_web_server(args, session: PlaySession) -> None:
     flask_cli.show_server_banner = lambda *args, **kwargs: None
   except Exception:
     pass
-  print(f'Web play server running at http://{host}:{port}')
+  print(f'Web play server running at http://{host}:{port}', flush=True)
   try:
     socketio.run(
         app,

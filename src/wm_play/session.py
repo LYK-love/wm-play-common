@@ -166,6 +166,8 @@ class EnvPlaySession(PlaySession):
         'reward': info.get('reward'),
         'return': info.get('return'),
         'action_name': action_name,
+        'terminal': info.get('terminal', info.get('term', info.get('is_terminal'))),
+        'continuation': info.get('continuation', info.get('cont_prob', info.get('cont'))),
         'done': info.get('done'),
         'trunc': info.get('trunc'),
     }

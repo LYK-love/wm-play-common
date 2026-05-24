@@ -13,7 +13,8 @@ def add_remote_server_args(
     jpeg_quality_default: int = 90,
 ) -> argparse.ArgumentParser:
   if include_controller:
-    parser.add_argument('--controller', choices=['human', 'policy'], default=controller_default)
+    parser.add_argument('--controller', default=controller_default,
+                        help='Compatibility option for controller names. Browser play always starts with human control.')
   parser.add_argument('--fps', type=int, default=fps_default,
                       help='Simulation tick rate used by the remote loop.')
   parser.add_argument('--size', type=int, default=size_default,
@@ -43,6 +44,10 @@ def add_pixel_policy_args(parser: argparse.ArgumentParser) -> argparse.ArgumentP
                       help='Repeatable policy checkpoint path. Policies consume '
                            'pixel observations through the wm_play PixelPolicy '
                            'interface and are independent from WM backends.')
+  parser.add_argument('--additional-policy-controller',
+                      action=argparse.BooleanOptionalAction,
+                      default=False,
+                      help='Enable policy checkpoints as additional selectable controllers.')
   parser.add_argument('--policy-name', action='append', default=[],
                       help='Optional repeatable policy display name. If omitted, '
                            'the name is inferred from the policy checkpoint path.')

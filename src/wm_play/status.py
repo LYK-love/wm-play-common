@@ -21,6 +21,21 @@ def _fmt_env(status: Mapping[str, Any]) -> str:
   return str(name) if not kind else f'{name} ({kind})'
 
 
+def _first_present(status: Mapping[str, Any], keys: Iterable[str]) -> Any:
+  for key in keys:
+    if key in status and status[key] is not None:
+      return status[key]
+  return None
+
+
+def _termination_line(status: Mapping[str, Any]) -> str:
+  cont = _first_present(status, ('continuation', 'cont_prob', 'cont'))
+  if cont is not None:
+    return f'Cont   : {_fmt_scalar(cont)}'
+  term = _first_present(status, ('terminal', 'term', 'is_terminal', 'done'))
+  return f'Term   : {_fmt_scalar(term)}'
+
+
 def _extra_lines(extras: Any) -> list[str]:
   if not extras:
     return []
@@ -47,6 +62,7 @@ def play_status_lines(status: Mapping[str, Any] | None, extras: Any = None) -> l
       f'Control: {status.get("control", "-")}',
       f'Step   : {_fmt_scalar(status.get("step", status.get("timestep")))}',
       f'Reward : {_fmt_scalar(status.get("reward"))}',
+      _termination_line(status),
       f'Return : {_fmt_scalar(status.get("return"))}',
       f'Action : {status.get("action_name", status.get("action", "-"))}',
   ]
