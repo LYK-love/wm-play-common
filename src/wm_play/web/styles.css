@@ -174,12 +174,30 @@ select:disabled {
 
 .export-paths {
   display: grid;
-  gap: 3px;
+  gap: 6px;
   margin-top: 6px;
   color: var(--muted);
   font-family: "IBM Plex Mono", "SFMono-Regular", "Menlo", monospace;
   font-size: 0.72rem;
-  overflow-wrap: anywhere;
+}
+
+.export-path-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.export-path-input {
+  width: 100%;
+  min-width: 0;
+  font-family: "IBM Plex Mono", "SFMono-Regular", "Menlo", monospace;
+  font-size: 0.72rem;
+  user-select: text;
+}
+
+.export-copy {
+  min-width: 58px;
 }
 
 .record-panel {

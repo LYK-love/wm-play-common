@@ -8,10 +8,7 @@ const els = {
   step: document.getElementById('step'),
   reset: document.getElementById('reset'),
   controller: document.getElementById('controller'),
-  prev: document.getElementById('prev'),
   next: document.getElementById('next'),
-  prevPolicy: document.getElementById('prev-policy'),
-  nextPolicy: document.getElementById('next-policy'),
   fps: document.getElementById('fps'),
   fpsValue: document.getElementById('fps-value'),
   horizon: document.getElementById('horizon'),
@@ -131,9 +128,34 @@ function renderRecord(data) {
   const paths = data.last_exported_paths || [];
   els.exportPaths.innerHTML = '';
   for (const path of paths) {
-    const div = document.createElement('div');
-    div.textContent = path;
-    els.exportPaths.appendChild(div);
+    const row = document.createElement('div');
+    row.className = 'export-path-row';
+    const input = document.createElement('input');
+    input.className = 'export-path-input';
+    input.type = 'text';
+    input.readOnly = true;
+    input.value = path;
+    input.onclick = () => input.select();
+    input.onfocus = () => input.select();
+    const copy = document.createElement('button');
+    copy.className = 'btn export-copy';
+    copy.type = 'button';
+    copy.textContent = 'Copy';
+    copy.onclick = async () => {
+      input.select();
+      try {
+        await navigator.clipboard.writeText(path);
+        copy.textContent = 'Copied';
+        setTimeout(() => {
+          copy.textContent = 'Copy';
+        }, 900);
+      } catch (err) {
+        document.execCommand('copy');
+      }
+    };
+    row.appendChild(input);
+    row.appendChild(copy);
+    els.exportPaths.appendChild(row);
   }
 }
 
@@ -234,10 +256,7 @@ els.pause.onclick = () => send({ type: 'set_paused', paused: !latest.paused });
 els.step.onclick = () => send({ type: 'keydown', key: 101, mod: 0 });
 els.reset.onclick = () => send({ type: 'keydown', key: 13, mod: 0 });
 els.controller.onclick = () => send({ type: 'keydown', key: 109, mod: 0 });
-els.prev.onclick = () => send({ type: 'keydown', key: 1073741904, mod: 0 });
 els.next.onclick = () => send({ type: 'keydown', key: 1073741903, mod: 0 });
-els.prevPolicy.onclick = () => send({ type: 'switch_policy', direction: -1 });
-els.nextPolicy.onclick = () => send({ type: 'switch_policy', direction: 1 });
 els.fps.oninput = () => {
   const fps = Number.parseInt(els.fps.value, 10);
   els.fpsValue.textContent = String(fps);
