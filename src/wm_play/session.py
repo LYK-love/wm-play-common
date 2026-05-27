@@ -7,6 +7,7 @@ import numpy as np
 from PIL import Image
 
 from .api import GameEnv, PixelPolicy, PlaySession, StepResult
+from .server_summary import print_runtime_event
 from .status import play_status_lines
 
 
@@ -71,6 +72,7 @@ class EnvPlaySession(PlaySession):
     self.render_fn = render_fn
     self.policies = list(policies or [])
     self.controller_index = 0
+    self.selected_policy_index = 0
     self.current_index = 0
     self.current_obs = None
     self.last_info: dict[str, Any] = {}
@@ -109,10 +111,32 @@ class EnvPlaySession(PlaySession):
       return
     self.current_index = (self.current_index + direction) % len(self.envs)
     self.reset()
+    print_runtime_event(
+        'backend',
+        f'{self.current_name}[{self.current_index + 1}/{len(self.envs)}]')
 
   def switch_controller(self) -> None:
     if self.policies:
-      self.controller_index = (self.controller_index + 1) % (1 + len(self.policies))
+      if self.controller_index == 0 and self.selected_policy_index:
+        self.controller_index = self.selected_policy_index + 1
+      else:
+        self.controller_index = (self.controller_index + 1) % (1 + len(self.policies))
+      if self.controller_index > 0:
+        self.selected_policy_index = self.controller_index - 1
+    print_runtime_event('controller', self._control_label())
+
+  def switch_policy(self, direction: int) -> None:
+    if not self.policies:
+      return
+    self.selected_policy_index = (self.selected_policy_index + int(direction)) % len(self.policies)
+    self.controller_index = self.selected_policy_index + 1
+    reset = getattr(self.policies[self.selected_policy_index], 'reset', None)
+    if callable(reset):
+      reset()
+    print_runtime_event(
+        'policy',
+        f'{self.selected_policy_index + 1}/{len(self.policies)} '
+        f'({self.policies[self.selected_policy_index].name})')
 
   def adjust_horizon(self, delta: int) -> None:
     update = getattr(self.current_env, 'adjust_horizon', None)
@@ -123,11 +147,13 @@ class EnvPlaySession(PlaySession):
     update = getattr(self.current_env, 'set_horizon', None)
     if callable(update):
       update(horizon)
+      print_runtime_event('wm horizon', self.horizon)
       return
     current = getattr(self.current_env, 'horizon', None)
     if current is not None:
       try:
         setattr(self.current_env, 'horizon', max(1, int(horizon)))
+        print_runtime_event('wm horizon', self.horizon)
         return
       except (AttributeError, TypeError, ValueError):
         pass
@@ -145,6 +171,11 @@ class EnvPlaySession(PlaySession):
       return policy(human_action)
     return human_action
 
+  def _control_label(self) -> str:
+    if self.controller_index > 0 and self.policies:
+      return self.policies[self.controller_index - 1].name
+    return 'human'
+
   def step(self, action: int) -> StepResult:
     result = self.current_env.step(action)
     self.current_obs = result.obs
@@ -154,6 +185,9 @@ class EnvPlaySession(PlaySession):
 
   def header(self, action: int, info: dict[str, Any]) -> list[str]:
     info = info if isinstance(info, dict) else {}
+    control = info.get('control')
+    if control is None:
+      control = self._control_label()
     action_name = info.get('action_name')
     action_idx = _action_to_int(action)
     if action_name is None:
@@ -161,7 +195,7 @@ class EnvPlaySession(PlaySession):
     status = {
         'env_name': self.current_name,
         'env_kind': self.current_kind,
-        'control': info.get('control', 'policy' if self.controller_index > 0 else 'human'),
+        'control': control,
         'step': info.get('step', info.get('steps', 0)),
         'reward': info.get('reward'),
         'return': info.get('return'),

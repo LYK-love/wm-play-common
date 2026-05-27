@@ -157,6 +157,12 @@ function renderRecord(data) {
     row.appendChild(copy);
     els.exportPaths.appendChild(row);
   }
+  if (data.last_export_error) {
+    const div = document.createElement('div');
+    div.className = 'export-error';
+    div.textContent = data.last_export_error;
+    els.exportPaths.appendChild(div);
+  }
 }
 
 function renderRam(data) {

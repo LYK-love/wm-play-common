@@ -200,6 +200,10 @@ select:disabled {
   min-width: 58px;
 }
 
+.export-error {
+  color: var(--red);
+}
+
 .record-panel {
   align-self: start;
 }

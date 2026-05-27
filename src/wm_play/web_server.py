@@ -518,12 +518,21 @@ def run_web_game_loop(args, session: PlaySession, shared: WebSharedState) -> Non
     with shared.lock:
       paused = shared.paused
       fps = max(1, int(shared.target_fps))
+      clients = int(shared.clients)
 
     if paused and not step_once:
       if needs_render:
         jpg, state = _render_state(args, session, shared)
         shared.set_frame(jpg, state)
       time.sleep(0.01)
+      continue
+
+    if clients <= 0 and not step_once and not (
+        shared.recorder is not None and shared.recorder.active):
+      if needs_render:
+        jpg, state = _render_state(args, session, shared)
+        shared.set_frame(jpg, state)
+      time.sleep(0.05)
       continue
 
     human_action = resolve_action(shared.get_pressed_keys(), keymap_ordered)

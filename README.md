@@ -40,6 +40,15 @@ flags, metadata, and RAM arrays when RAM mode is active. Project adapters still
 own model/env semantics. For example, an Atari adapter provides Pong-specific
 RAM slot names and quick-start behavior.
 
+The browser control bar exposes one forward-only selector for each mode family:
+`Next Controller` cycles `human` and all loaded policy controllers, and
+`Next Env` cycles the real environment and loaded world-model backends. Do not
+add separate previous buttons or policy-specific selector buttons to project
+copies of the shared UI. Keyboard hints should mirror the same contract:
+`M` means next controller and Right means next env/backend. The server may keep
+older keyboard events as compatibility aliases, but they are not part of the
+visible browser UI contract.
+
 Browser play always opens on the real environment with human control:
 
 ```text
