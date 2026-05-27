@@ -129,11 +129,105 @@ Use `print_runtime_event(label, value)` instead of hand-formatting these lines.
 - `wm_play.recording`: generic trajectory recorder and exporter
 - `wm_play.cli`: shared play CLI flags
 - `wm_play.server_summary`: compact startup summary formatting
+- `wm_play.standalone`: real-env-only `wm-play` runner
 
 The shared CLI helpers define common browser-play flags such as
 `--wm-checkpoint`, `--wm-name`, `--policy-checkpoint`, and `--policy-name`.
 Projects still own checkpoint loading, but user-facing commands should use
 these names consistently across adapters.
+
+## Standalone Real Env
+
+`wm-play-common` also installs a small standalone real-env runner:
+
+```bash
+python -m pip install -e "/path/to/wm-play-common[gym]"
+wm-play --env-name PongNoFrameskip-v4 --web-port 9876
+```
+
+For local source-tree testing without installing the console script:
+
+```bash
+PYTHONPATH=src python -m wm_play --env-name PongNoFrameskip-v4 --web-port 9876
+```
+
+The standalone runner opens the shared browser UI with only the real
+environment loaded:
+
+```text
+backend    = real
+controller = human
+wm         = none
+policy     = none
+```
+
+It lazy-loads `gymnasium` first and then falls back to `gym`; install one of
+those packages plus the environment package/ROMs needed by the selected
+`--env-name`. The common runner supports discrete action spaces. It maps
+Atari-style action names to the shared `W/A/S/D/Space` controls when the env
+exposes `get_action_meanings()`, and falls back to simple numeric actions for
+generic discrete envs.
+
+The standalone command intentionally does not load WM checkpoints or policy
+checkpoints. Those require project-specific adapters because checkpoint
+formats, model state, latent rollout, and policy preprocessing are owned by
+each WM project.
+
+## Project Adapter Contract
+
+A project that wants to plug a WM backend into `wm-play-common` must expose a
+pixel-space `GameEnv` or `PlaySession` boundary. The common loop should be able
+to call:
+
+```python
+obs, info = env.reset()
+result = env.step(action)
+frame = session.render_frame(size, header_lines)
+```
+
+Required WM/backend behavior:
+
+- `reset()` returns `(obs, info)`.
+- `step(action)` returns `StepResult(obs, reward, done, trunc, info)`.
+- `obs` is renderable pixels, or the adapter implements `render_frame(...)`.
+- Finite WM rollouts expose `horizon`; real envs expose `horizon = None`.
+- If horizon is editable, provide `set_horizon(horizon)` or
+  `adjust_horizon(delta)`.
+- Backends are selectable modes. Browser play still starts on the real env.
+
+Policy controllers use the pixel-level `PixelPolicy` interface:
+
+```python
+class MyPolicy:
+  name = "policy1"
+
+  def reset(self) -> None:
+    ...
+
+  def act(self, obs) -> PolicyAction:
+    ...
+```
+
+The `obs` passed to `act()` is the current backend's pixel observation. If a
+policy needs latent state, frame stacking, torch tensors, action repeats, or
+checkpoint-specific preprocessing, the project adapter handles that internally
+and returns only `PolicyAction(action=...)` to the common layer.
+
+Adapter CLIs should use the shared helpers from `wm_play.cli`:
+
+```python
+add_remote_server_args(parser)
+add_play_checkpoint_args(parser)
+```
+
+Project adapters then validate/load their own `--wm-checkpoint`,
+`--policy-checkpoint`, `--wm-name`, and `--policy-name` values, construct the
+project-specific backends/policies, and pass them to either `EnvPlaySession` or
+their own `PlaySession` implementation before calling `run_web_server(...)`.
+
+Startup output should be printed through `print_remote_server_summary(...)`,
+and runtime selector changes should use `print_runtime_event(...)`, so all WM
+projects expose the same terminal and browser behavior.
 
 There is no pygame/native client. The client side is always a browser:
 
@@ -170,9 +264,11 @@ wm-play-common/
   src/wm_play/
     api.py
     cli.py
+    standalone.py
     server_summary.py
     session.py
     web_server.py
+    __main__.py
     web/
       index.html
       app.js
