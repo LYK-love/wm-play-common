@@ -69,6 +69,28 @@ def add_world_model_checkpoint_args(parser: argparse.ArgumentParser) -> argparse
   return parser
 
 
+def add_world_model_initial_source_arg(
+    parser: argparse.ArgumentParser,
+    *,
+    default: str = 'real',
+) -> argparse.ArgumentParser:
+  """Add the shared WM reset-initialization mode flag.
+
+  Projects that need an external environment observation to bootstrap a WM
+  latent should use this flag when they also support prior-only resets.
+  """
+  parser.add_argument(
+      '--wm-initial-source',
+      choices=['real', 'prior', 'dataset'],
+      default=default,
+      help='How WM rollouts are initialized. "real" lets the adapter use a '
+           'real-env reset observation to bootstrap WM state. "prior" samples '
+           'the initial latent from the WM prior and decodes the first '
+           'observation without querying the real env. "dataset" uses an '
+           'offline bootstrap observation instead of new real-env data.')
+  return parser
+
+
 def add_play_checkpoint_args(
     parser: argparse.ArgumentParser,
     *,

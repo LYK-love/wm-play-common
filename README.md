@@ -194,6 +194,12 @@ Required WM/backend behavior:
 - If horizon is editable, provide `set_horizon(horizon)` or
   `adjust_horizon(delta)`.
 - Backends are selectable modes. Browser play still starts on the real env.
+- WMs that normally need a real-env reset observation to initialize latent state
+  should expose `--wm-initial-source real|prior` when they support both modes.
+  `real` means the real reset observation is used only as a bootstrap input;
+  the displayed step-0 observation should still be decoded by the WM. `prior`
+  means the initial latent is sampled from the WM prior, so the WM backend does
+  not query the real env during reset.
 
 Policy controllers use the pixel-level `PixelPolicy` interface:
 
@@ -221,9 +227,10 @@ add_play_checkpoint_args(parser)
 ```
 
 Project adapters then validate/load their own `--wm-checkpoint`,
-`--policy-checkpoint`, `--wm-name`, and `--policy-name` values, construct the
-project-specific backends/policies, and pass them to either `EnvPlaySession` or
-their own `PlaySession` implementation before calling `run_web_server(...)`.
+`--policy-checkpoint`, `--wm-name`, `--policy-name`, and optional
+`--wm-initial-source` values, construct the project-specific backends/policies,
+and pass them to either `EnvPlaySession` or their own `PlaySession`
+implementation before calling `run_web_server(...)`.
 
 Startup output should be printed through `print_remote_server_summary(...)`,
 and runtime selector changes should use `print_runtime_event(...)`, so all WM
