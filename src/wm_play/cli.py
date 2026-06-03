@@ -41,7 +41,9 @@ def add_pixel_policy_args(parser: argparse.ArgumentParser) -> argparse.ArgumentP
   a ``PixelPolicy``. The common web loop only calls ``policy.act(pixel_obs)``.
   """
   parser.add_argument('--policy-checkpoint', action='append', default=[],
-                      help='Repeatable policy checkpoint path. Policies consume '
+                      help='Repeatable policy checkpoint path or policy run directory. '
+                           'Project loaders may resolve directories to latest policy ckpts. '
+                           'Policies consume '
                            'pixel observations through the wm_play PixelPolicy '
                            'interface and are independent from WM backends.')
   parser.add_argument('--additional-policy-controller',
