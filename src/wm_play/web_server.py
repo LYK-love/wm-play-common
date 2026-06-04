@@ -112,6 +112,10 @@ class WebSharedState:
     with self.lock:
       return set(self.pressed_keys)
 
+  def clear_keys(self) -> None:
+    with self.lock:
+      self.pressed_keys.clear()
+
 
 def build_keymap_ordered(keymap):
   ordered = OrderedDict()
@@ -338,6 +342,7 @@ def _process_event(
       shared.set_key(key, True)
       return False, False, False
     if key == pygame.K_RETURN:
+      shared.clear_keys()
       return True, False, False
     if key == pygame.K_PERIOD:
       with shared.lock:
@@ -352,22 +357,27 @@ def _process_event(
       return False, False, True
     if key == pygame.K_m:
       session.switch_controller()
+      shared.clear_keys()
       return False, False, True
     if key == pygame.K_RIGHT:
       if mod & pygame.KMOD_SHIFT:
         switch_policy = getattr(session, 'switch_policy', None)
         if callable(switch_policy):
           switch_policy(+1)
+        shared.clear_keys()
         return False, False, True
       session.switch_backend(+1)
+      shared.clear_keys()
       return False, False, True
     if key == pygame.K_LEFT:
       if mod & pygame.KMOD_SHIFT:
         switch_policy = getattr(session, 'switch_policy', None)
         if callable(switch_policy):
           switch_policy(-1)
+        shared.clear_keys()
         return False, False, True
       session.switch_backend(-1)
+      shared.clear_keys()
       return False, False, True
     if key == pygame.K_UP:
       current_horizon = _session_horizon(session)
@@ -421,8 +431,13 @@ def _process_event(
     _set_session_paused(session, paused)
     return False, False, True
 
+  if etype == 'clear_keys':
+    shared.clear_keys()
+    return False, False, True
+
   if etype == 'switch_backend':
     session.switch_backend(int(event.get('direction', 1)))
+    shared.clear_keys()
     return False, False, True
 
   if etype == 'switch_policy':

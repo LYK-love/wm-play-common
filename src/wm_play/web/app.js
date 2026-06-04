@@ -33,6 +33,7 @@ const els = {
 let latest = {};
 let allRamOpen = false;
 let lastFrameAt = 0;
+const pressedActionKeys = new Set();
 
 const keyMap = {
   Backspace: 8,
@@ -261,7 +262,10 @@ setInterval(() => {
 els.pause.onclick = () => send({ type: 'set_paused', paused: !latest.paused });
 els.step.onclick = () => send({ type: 'keydown', key: 101, mod: 0 });
 els.reset.onclick = () => send({ type: 'keydown', key: 13, mod: 0 });
-els.controller.onclick = () => send({ type: 'keydown', key: 109, mod: 0 });
+els.controller.onclick = () => {
+  els.controller.blur();
+  send({ type: 'keydown', key: 109, mod: 0 });
+};
 els.next.onclick = () => send({ type: 'keydown', key: 1073741903, mod: 0 });
 els.fps.oninput = () => {
   const fps = Number.parseInt(els.fps.value, 10);
@@ -306,11 +310,26 @@ window.addEventListener('keydown', (event) => {
   if ([' ', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
     event.preventDefault();
   }
+  if ([32, 97, 100, 115, 119].includes(key)) pressedActionKeys.add(key);
   send({ type: 'keydown', key, mod: pygameMod(event) });
 });
 window.addEventListener('keyup', (event) => {
   if (isInputLike(event.target)) return;
   const key = pygameKey(event);
   if (key === null) return;
+  pressedActionKeys.delete(key);
   send({ type: 'keyup', key, mod: pygameMod(event) });
+});
+
+function releaseActionKeys() {
+  for (const key of pressedActionKeys) {
+    send({ type: 'keyup', key, mod: 0 });
+  }
+  pressedActionKeys.clear();
+  send({ type: 'clear_keys' });
+}
+
+window.addEventListener('blur', releaseActionKeys);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) releaseActionKeys();
 });
