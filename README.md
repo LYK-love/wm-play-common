@@ -21,6 +21,9 @@ info = result.info
 `result.obs` must be renderable pixels, or a dict containing renderable pixel
 observations. Latent world models must keep encoder/RSSM/transformer state
 inside the adapter and decode every displayed observation back to pixel space.
+This same contract is used by the browser frontend and by headless notebook or
+evaluation code; backend adapters should not depend on Flask, SocketIO, or any
+browser-only state.
 The common loop should be able to treat real envs and WMs as:
 
 ```python
@@ -31,6 +34,9 @@ Policies plugged into the tool follow the same boundary. A `PixelPolicy` sees
 pixel observations from the current backend and returns an action; latent
 policies can do their own encoding internally, but the shared play layer never
 depends on latent tensors.
+Optional policy diagnostics, such as entropy, value, logits, or action
+probabilities, belong in `PolicyAction.info` or project `StepResult.info`; only
+the selected action is part of the required control path.
 
 The web server owns the control loop, keyboard handling, pause/reset/step,
 backend switching, policy/controller switching, server-side FPS control, WM
@@ -58,8 +64,9 @@ controller = human
 
 World-model backends and policy controllers may be loaded at startup, but they
 must be additional selectable modes. Users switch to them live through the
-shared backend/controller controls. CLI compatibility flags such as
-`--controller` must not change the initial browser state.
+shared backend/controller controls. Remote play CLIs should not expose a
+controller-selection flag; the initial browser controller is always `human`,
+and users can switch controller live through the shared UI.
 
 `session.horizon is None` means the active backend has no finite WM rollout
 horizon, which is how real-env backends are shown in the UI (`∞`). Finite WM
@@ -79,6 +86,19 @@ continuation should pass `continuation` or `cont_prob`, which is shown as
 `info["status_extras"]`, for example an OC-STORM KV-cache indicator. Horizon is
 intentionally not part of these status lines because the shared toolbar already
 has a horizon control.
+
+Optional adapter extension points:
+
+- `record_metadata() -> dict`: extra JSON metadata for web and headless
+  trajectory exports.
+- `get_web_state() -> dict`: project-specific browser state. Keep shared keys
+  aligned with the common frontend and add project keys only for real project
+  UI needs.
+- `render_frame(size, header_lines)`: project-specific rendering. Prefer
+  returning pixels through `obs` when possible.
+- Project-specific bootstrap helpers are allowed for headless evaluation, for
+  example Dreamer's `DreamerWorldModelEnv.bootstrap_from_observation(obs)` for
+  initializing multiple WMs from the same dataset observation.
 
 ## Output Contract
 
@@ -122,6 +142,8 @@ Use `print_runtime_event(label, value)` instead of hand-formatting these lines.
 
 - `wm_play.api`: `GameEnv`, `RenderableGameEnv`, `PlaySession`, `PixelPolicy`,
   `PolicyAction`, `StepResult`
+- `wm_play.headless`: browser-free `run_episode()` rollout helper and
+  `HeadlessRollout` result for notebooks and batch evaluation
 - `wm_play.status`: shared play status formatting for the browser and legacy
   pygame headers
 - `wm_play.session`: generic session wrapper for simple step-style envs
@@ -132,9 +154,41 @@ Use `print_runtime_event(label, value)` instead of hand-formatting these lines.
 - `wm_play.standalone`: real-env-only `wm-play` runner
 
 The shared CLI helpers define common browser-play flags such as
-`--wm-checkpoint`, `--wm-name`, `--policy-checkpoint`, and `--policy-name`.
-Projects still own checkpoint loading, but user-facing commands should use
-these names consistently across adapters.
+`--env-id`, `--wm-checkpoint`, `--wm-name`, `--policy-checkpoint`,
+`--policy-name`, `--wm-horizon`, `--wm-initial-source`, and
+`--wm-bootstrap-dataset`. Projects still own checkpoint loading, but
+user-facing commands should use these names consistently across adapters.
+
+## Headless API
+
+Notebook and evaluation code can use the same backend/session contract without
+starting the frontend:
+
+```python
+from wm_play.headless import run_episode
+
+session.reset()
+session.switch_backend(+1)   # choose a WM backend, if the session has one
+session.switch_controller()  # choose a configured policy, if desired
+
+rollout = run_episode(
+    session,
+    max_steps=512,
+    size=256,
+    fps=15,
+    export_dir="artifacts/play_rollouts",
+    export_reason="eval_preview",
+)
+
+frames = rollout.frames
+actions = rollout.actions
+paths = rollout.exported_paths
+```
+
+The headless helper calls `session.choose_action(...)`, `session.step(...)`, and
+`session.render_frame(...)`, matching the web loop's semantics. It returns
+in-memory arrays and can also export the same `npz`/`mp4`/`json` artifacts as
+the browser recorder.
 
 ## Standalone Real Env
 
@@ -142,13 +196,13 @@ these names consistently across adapters.
 
 ```bash
 python -m pip install -e "/path/to/wm-play-common[gym]"
-wm-play --env-name PongNoFrameskip-v4 --web-port 9876
+wm-play --env-id PongNoFrameskip-v4 --web-port 9876
 ```
 
 For local source-tree testing without installing the console script:
 
 ```bash
-PYTHONPATH=src python -m wm_play --env-name PongNoFrameskip-v4 --web-port 9876
+PYTHONPATH=src python -m wm_play --env-id PongNoFrameskip-v4 --web-port 9876
 ```
 
 The standalone runner opens the shared browser UI with only the real
@@ -163,7 +217,7 @@ policy     = none
 
 It lazy-loads `gymnasium` first and then falls back to `gym`; install one of
 those packages plus the environment package/ROMs needed by the selected
-`--env-name`. The common runner supports discrete action spaces. It maps
+`--env-id`. The common runner supports discrete action spaces. It maps
 Atari-style action names to the shared `W/A/S/D/Space` controls when the env
 exposes `get_action_meanings()`, and falls back to simple numeric actions for
 generic discrete envs.
@@ -195,11 +249,13 @@ Required WM/backend behavior:
   `adjust_horizon(delta)`.
 - Backends are selectable modes. Browser play still starts on the real env.
 - WMs that normally need a real-env reset observation to initialize latent state
-  should expose `--wm-initial-source real|prior` when they support both modes.
+  should expose `--wm-initial-source real|prior|dataset` for the modes they
+  support.
   `real` means the real reset observation is used only as a bootstrap input;
   the displayed step-0 observation should still be decoded by the WM. `prior`
   means the initial latent is sampled from the WM prior, so the WM backend does
-  not query the real env during reset.
+  not query the real env during reset. `dataset` means reset bootstraps from an
+  existing offline dataset via `--wm-bootstrap-dataset`.
 
 Policy controllers use the pixel-level `PixelPolicy` interface:
 

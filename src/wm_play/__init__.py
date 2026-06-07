@@ -10,12 +10,14 @@ from .api import (
     RenderableGameEnv,
     StepResult,
 )
+from .headless import HeadlessRollout, run_episode
 from .server_summary import CheckpointEntry, print_remote_server_summary, print_runtime_event
 from .status import play_status_columns, play_status_lines
 
 __all__ = [
     'CheckpointEntry',
     'GameEnv',
+    'HeadlessRollout',
     'PixelPolicy',
     'PlaySession',
     'PolicyAction',
@@ -25,4 +27,5 @@ __all__ = [
     'print_runtime_event',
     'play_status_columns',
     'play_status_lines',
+    'run_episode',
 ]
