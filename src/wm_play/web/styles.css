@@ -174,12 +174,34 @@ select:disabled {
 
 .export-paths {
   display: grid;
-  gap: 3px;
+  gap: 6px;
   margin-top: 6px;
   color: var(--muted);
   font-family: "IBM Plex Mono", "SFMono-Regular", "Menlo", monospace;
   font-size: 0.72rem;
-  overflow-wrap: anywhere;
+}
+
+.export-path-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.export-path-input {
+  width: 100%;
+  min-width: 0;
+  font-family: "IBM Plex Mono", "SFMono-Regular", "Menlo", monospace;
+  font-size: 0.72rem;
+  user-select: text;
+}
+
+.export-copy {
+  min-width: 58px;
+}
+
+.export-error {
+  color: var(--red);
 }
 
 .record-panel {
@@ -197,12 +219,20 @@ select:disabled {
   align-items: center;
 }
 
-.speed {
+.speed,
+.horizon-control {
   display: grid;
-  grid-template-columns: auto 140px 32px;
   gap: 8px;
   align-items: center;
+}
+
+.speed {
+  grid-template-columns: auto 140px 32px;
   margin-left: auto;
+}
+
+.horizon-control {
+  grid-template-columns: auto 72px;
 }
 
 .frame-wrap {

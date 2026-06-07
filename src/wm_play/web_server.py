@@ -112,6 +112,10 @@ class WebSharedState:
     with self.lock:
       return set(self.pressed_keys)
 
+  def clear_keys(self) -> None:
+    with self.lock:
+      self.pressed_keys.clear()
+
 
 def build_keymap_ordered(keymap):
   ordered = OrderedDict()
@@ -180,7 +184,10 @@ def _render_state(
     action: int = 0,
     info: dict[str, Any] | None = None,
 ) -> tuple[bytes, dict[str, Any]]:
-  info = info or {}
+  if info is None:
+    info = getattr(session, 'last_info', {}) or {}
+  else:
+    info = info or {}
   with shared.lock:
     paused = bool(shared.paused)
     fps = int(shared.target_fps)
@@ -204,9 +211,14 @@ def _render_state(
         'last_action_name': _action_name(session, action),
     }
 
+  horizon = _session_horizon(session)
+  horizon_editable = horizon is not None
   state.update({
       'paused': paused,
       'fps': fps,
+      'horizon': horizon,
+      'horizon_display': str(horizon) if horizon_editable else '∞',
+      'horizon_editable': horizon_editable,
       'can_step_once': paused,
       'can_edit': paused and bool(state.get('ram_enabled')),
   })
@@ -249,6 +261,50 @@ def _record_metadata(session: PlaySession, state: dict[str, Any]) -> dict[str, A
   }
 
 
+def _session_horizon(session: PlaySession) -> int | None:
+  value = getattr(session, 'horizon', None)
+  if value is not None:
+    try:
+      return int(value)
+    except (TypeError, ValueError):
+      pass
+  env = getattr(session, 'current_env', None)
+  value = getattr(env, 'horizon', None)
+  if value is not None:
+    try:
+      return int(value)
+    except (TypeError, ValueError):
+      pass
+  current_backend_index = getattr(session, 'current_backend_index', None)
+  if current_backend_index == 0:
+    return None
+  value = getattr(session, 'policy_context_length', None)
+  if value is not None:
+    try:
+      return int(value)
+    except (TypeError, ValueError):
+      pass
+  return None
+
+
+def _set_session_horizon(session: PlaySession, horizon: int) -> bool:
+  horizon = max(1, int(horizon))
+  current = _session_horizon(session)
+  if current is None:
+    return False
+  if horizon == current:
+    return False
+  setter = getattr(session, 'set_horizon', None)
+  if callable(setter):
+    setter(horizon)
+    return True
+  adjust = getattr(session, 'adjust_horizon', None)
+  if callable(adjust):
+    adjust(horizon - current)
+    return True
+  return False
+
+
 def _process_record_event(
     etype: str,
     args,
@@ -286,6 +342,7 @@ def _process_event(
       shared.set_key(key, True)
       return False, False, False
     if key == pygame.K_RETURN:
+      shared.clear_keys()
       return True, False, False
     if key == pygame.K_PERIOD:
       with shared.lock:
@@ -300,18 +357,39 @@ def _process_event(
       return False, False, True
     if key == pygame.K_m:
       session.switch_controller()
+      shared.clear_keys()
       return False, False, True
     if key == pygame.K_RIGHT:
+      if mod & pygame.KMOD_SHIFT:
+        switch_policy = getattr(session, 'switch_policy', None)
+        if callable(switch_policy):
+          switch_policy(+1)
+        shared.clear_keys()
+        return False, False, True
       session.switch_backend(+1)
+      shared.clear_keys()
       return False, False, True
     if key == pygame.K_LEFT:
+      if mod & pygame.KMOD_SHIFT:
+        switch_policy = getattr(session, 'switch_policy', None)
+        if callable(switch_policy):
+          switch_policy(-1)
+        shared.clear_keys()
+        return False, False, True
       session.switch_backend(-1)
+      shared.clear_keys()
       return False, False, True
     if key == pygame.K_UP:
-      session.adjust_horizon(+1)
+      current_horizon = _session_horizon(session)
+      if current_horizon is not None:
+        if _set_session_horizon(session, current_horizon + 1):
+          session.reset()
       return False, False, True
     if key == pygame.K_DOWN:
-      session.adjust_horizon(-1)
+      current_horizon = _session_horizon(session)
+      if current_horizon is not None:
+        if _set_session_horizon(session, current_horizon - 1):
+          session.reset()
       return False, False, True
     if key in {pygame.K_MINUS, pygame.K_KP_MINUS}:
       with shared.lock:
@@ -338,11 +416,34 @@ def _process_event(
       shared.target_fps = max(1, min(120, int(event.get('fps', 15))))
     return False, False, True
 
+  if etype == 'set_horizon':
+    try:
+      if _set_session_horizon(session, int(event.get('horizon', 1))):
+        session.reset()
+    except (TypeError, ValueError):
+      pass
+    return False, False, True
+
   if etype == 'set_paused':
     with shared.lock:
       shared.paused = bool(event.get('paused', False))
       paused = shared.paused
     _set_session_paused(session, paused)
+    return False, False, True
+
+  if etype == 'clear_keys':
+    shared.clear_keys()
+    return False, False, True
+
+  if etype == 'switch_backend':
+    session.switch_backend(int(event.get('direction', 1)))
+    shared.clear_keys()
+    return False, False, True
+
+  if etype == 'switch_policy':
+    switch_policy = getattr(session, 'switch_policy', None)
+    if callable(switch_policy):
+      switch_policy(int(event.get('direction', 1)))
     return False, False, True
 
   if _process_record_event(etype, args, session, shared):
@@ -432,12 +533,21 @@ def run_web_game_loop(args, session: PlaySession, shared: WebSharedState) -> Non
     with shared.lock:
       paused = shared.paused
       fps = max(1, int(shared.target_fps))
+      clients = int(shared.clients)
 
     if paused and not step_once:
       if needs_render:
         jpg, state = _render_state(args, session, shared)
         shared.set_frame(jpg, state)
       time.sleep(0.01)
+      continue
+
+    if clients <= 0 and not step_once and not (
+        shared.recorder is not None and shared.recorder.active):
+      if needs_render:
+        jpg, state = _render_state(args, session, shared)
+        shared.set_frame(jpg, state)
+      time.sleep(0.05)
       continue
 
     human_action = resolve_action(shared.get_pressed_keys(), keymap_ordered)
@@ -568,7 +678,7 @@ def run_web_server(args, session: PlaySession) -> None:
     flask_cli.show_server_banner = lambda *args, **kwargs: None
   except Exception:
     pass
-  print(f'Web play server running at http://{host}:{port}')
+  print(f'Web play server running at http://{host}:{port}', flush=True)
   try:
     socketio.run(
         app,
