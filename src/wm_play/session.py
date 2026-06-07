@@ -208,10 +208,17 @@ class EnvPlaySession(PlaySession):
     return play_status_lines(status, info.get('status_extras'))
 
   def record_metadata(self) -> dict[str, Any]:
+    env_names = [
+        getattr(slot.env, 'name', slot.name)
+        for slot in self.envs
+    ]
     return {
         'backend': self.current_name,
         'backend_index': int(self.current_index),
         'backend_count': int(len(self.envs)),
+        'envs': env_names,
+        'active_env': self.current_name,
+        'horizon': self.horizon,
         'controller': self._control_label(),
         'policy_index': int(self.selected_policy_index),
         'policy_count': int(len(self.policies)),
