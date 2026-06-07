@@ -207,6 +207,19 @@ class EnvPlaySession(PlaySession):
     }
     return play_status_lines(status, info.get('status_extras'))
 
+  def record_metadata(self) -> dict[str, Any]:
+    return {
+        'backend': self.current_name,
+        'backend_index': int(self.current_index),
+        'backend_count': int(len(self.envs)),
+        'controller': self._control_label(),
+        'policy_index': int(self.selected_policy_index),
+        'policy_count': int(len(self.policies)),
+        'policy_label': (
+            self.policies[self.selected_policy_index].name
+            if self.policies else ''),
+    }
+
   def render_frame(self, size: int, header_lines: list[str]):
     render = getattr(self.current_env, 'render_frame', None)
     if callable(render):
