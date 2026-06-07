@@ -8,10 +8,10 @@ const els = {
   step: document.getElementById('step'),
   reset: document.getElementById('reset'),
   controller: document.getElementById('controller'),
-  prev: document.getElementById('prev'),
   next: document.getElementById('next'),
   fps: document.getElementById('fps'),
   fpsValue: document.getElementById('fps-value'),
+  horizon: document.getElementById('horizon'),
   record: document.getElementById('record'),
   export: document.getElementById('export'),
   snapshot: document.getElementById('snapshot'),
@@ -33,6 +33,7 @@ const els = {
 let latest = {};
 let allRamOpen = false;
 let lastFrameAt = 0;
+const pressedActionKeys = new Set();
 
 const keyMap = {
   Backspace: 8,
@@ -72,6 +73,15 @@ function pygameKey(event) {
   return null;
 }
 
+function pygameMod(event) {
+  let mod = 0;
+  if (event.shiftKey) mod |= 3;
+  if (event.ctrlKey) mod |= 192;
+  if (event.altKey) mod |= 768;
+  if (event.metaKey) mod |= 3072;
+  return mod;
+}
+
 function isInputLike(target) {
   return target instanceof HTMLInputElement ||
     target instanceof HTMLTextAreaElement ||
@@ -95,6 +105,11 @@ function renderStatus(data) {
   els.step.disabled = !data.paused;
   els.fps.value = String(data.fps || 15);
   els.fpsValue.textContent = String(data.fps || 15);
+  const horizonEditable = !!data.horizon_editable;
+  els.horizon.disabled = !horizonEditable;
+  if (document.activeElement !== els.horizon) {
+    els.horizon.value = data.horizon_display || '';
+  }
   renderRecord(data);
 }
 
@@ -114,8 +129,39 @@ function renderRecord(data) {
   const paths = data.last_exported_paths || [];
   els.exportPaths.innerHTML = '';
   for (const path of paths) {
+    const row = document.createElement('div');
+    row.className = 'export-path-row';
+    const input = document.createElement('input');
+    input.className = 'export-path-input';
+    input.type = 'text';
+    input.readOnly = true;
+    input.value = path;
+    input.onclick = () => input.select();
+    input.onfocus = () => input.select();
+    const copy = document.createElement('button');
+    copy.className = 'btn export-copy';
+    copy.type = 'button';
+    copy.textContent = 'Copy';
+    copy.onclick = async () => {
+      input.select();
+      try {
+        await navigator.clipboard.writeText(path);
+        copy.textContent = 'Copied';
+        setTimeout(() => {
+          copy.textContent = 'Copy';
+        }, 900);
+      } catch (err) {
+        document.execCommand('copy');
+      }
+    };
+    row.appendChild(input);
+    row.appendChild(copy);
+    els.exportPaths.appendChild(row);
+  }
+  if (data.last_export_error) {
     const div = document.createElement('div');
-    div.textContent = path;
+    div.className = 'export-error';
+    div.textContent = data.last_export_error;
     els.exportPaths.appendChild(div);
   }
 }
@@ -216,13 +262,30 @@ setInterval(() => {
 els.pause.onclick = () => send({ type: 'set_paused', paused: !latest.paused });
 els.step.onclick = () => send({ type: 'keydown', key: 101, mod: 0 });
 els.reset.onclick = () => send({ type: 'keydown', key: 13, mod: 0 });
-els.controller.onclick = () => send({ type: 'keydown', key: 109, mod: 0 });
-els.prev.onclick = () => send({ type: 'keydown', key: 1073741904, mod: 0 });
+els.controller.onclick = () => {
+  els.controller.blur();
+  send({ type: 'keydown', key: 109, mod: 0 });
+};
 els.next.onclick = () => send({ type: 'keydown', key: 1073741903, mod: 0 });
 els.fps.oninput = () => {
   const fps = Number.parseInt(els.fps.value, 10);
   els.fpsValue.textContent = String(fps);
   send({ type: 'set_fps', fps });
+};
+function commitHorizon() {
+  if (els.horizon.disabled) return;
+  const horizon = Number.parseInt(els.horizon.value, 10);
+  if (Number.isFinite(horizon) && horizon >= 1) {
+    send({ type: 'set_horizon', horizon });
+  }
+}
+els.horizon.onchange = commitHorizon;
+els.horizon.onkeydown = (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    commitHorizon();
+    els.horizon.blur();
+  }
 };
 els.record.onclick = () => send({ type: 'toggle_recording' });
 els.export.onclick = () => send({ type: 'export_now' });
@@ -247,11 +310,26 @@ window.addEventListener('keydown', (event) => {
   if ([' ', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
     event.preventDefault();
   }
-  send({ type: 'keydown', key, mod: 0 });
+  if ([32, 97, 100, 115, 119].includes(key)) pressedActionKeys.add(key);
+  send({ type: 'keydown', key, mod: pygameMod(event) });
 });
 window.addEventListener('keyup', (event) => {
   if (isInputLike(event.target)) return;
   const key = pygameKey(event);
   if (key === null) return;
-  send({ type: 'keyup', key, mod: 0 });
+  pressedActionKeys.delete(key);
+  send({ type: 'keyup', key, mod: pygameMod(event) });
+});
+
+function releaseActionKeys() {
+  for (const key of pressedActionKeys) {
+    send({ type: 'keyup', key, mod: 0 });
+  }
+  pressedActionKeys.clear();
+  send({ type: 'clear_keys' });
+}
+
+window.addEventListener('blur', releaseActionKeys);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) releaseActionKeys();
 });

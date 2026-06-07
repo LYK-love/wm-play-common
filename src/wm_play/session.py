@@ -7,18 +7,8 @@ import numpy as np
 from PIL import Image
 
 from .api import GameEnv, PixelPolicy, PlaySession, StepResult
-
-
-def _fmt_scalar(value: Any) -> str:
-  if value is None:
-    return '-'
-  try:
-    value = float(value)
-  except Exception:
-    return str(value)
-  if abs(value - round(value)) < 1e-6:
-    return str(int(round(value)))
-  return f'{value:.2f}'
+from .server_summary import print_runtime_event
+from .status import play_status_lines
 
 
 def _action_to_int(action: Any) -> int:
@@ -82,6 +72,7 @@ class EnvPlaySession(PlaySession):
     self.render_fn = render_fn
     self.policies = list(policies or [])
     self.controller_index = 0
+    self.selected_policy_index = 0
     self.current_index = 0
     self.current_obs = None
     self.last_info: dict[str, Any] = {}
@@ -93,6 +84,20 @@ class EnvPlaySession(PlaySession):
   @property
   def current_name(self) -> str:
     return self.envs[self.current_index].name
+
+  @property
+  def current_kind(self) -> str:
+    return 'model' if self.horizon is not None else 'real'
+
+  @property
+  def horizon(self) -> int | None:
+    value = getattr(self.current_env, 'horizon', None)
+    if value is None:
+      return None
+    try:
+      return int(value)
+    except (TypeError, ValueError):
+      return None
 
   def reset(self) -> None:
     self.current_obs, self.last_info = self.current_env.reset()
@@ -106,15 +111,56 @@ class EnvPlaySession(PlaySession):
       return
     self.current_index = (self.current_index + direction) % len(self.envs)
     self.reset()
+    print_runtime_event(
+        'backend',
+        f'{self.current_name}[{self.current_index + 1}/{len(self.envs)}]')
 
   def switch_controller(self) -> None:
     if self.policies:
-      self.controller_index = (self.controller_index + 1) % (1 + len(self.policies))
+      if self.controller_index == 0 and self.selected_policy_index:
+        self.controller_index = self.selected_policy_index + 1
+      else:
+        self.controller_index = (self.controller_index + 1) % (1 + len(self.policies))
+      if self.controller_index > 0:
+        self.selected_policy_index = self.controller_index - 1
+    print_runtime_event('controller', self._control_label())
+
+  def switch_policy(self, direction: int) -> None:
+    if not self.policies:
+      return
+    self.selected_policy_index = (self.selected_policy_index + int(direction)) % len(self.policies)
+    self.controller_index = self.selected_policy_index + 1
+    reset = getattr(self.policies[self.selected_policy_index], 'reset', None)
+    if callable(reset):
+      reset()
+    print_runtime_event(
+        'policy',
+        f'{self.selected_policy_index + 1}/{len(self.policies)} '
+        f'({self.policies[self.selected_policy_index].name})')
 
   def adjust_horizon(self, delta: int) -> None:
     update = getattr(self.current_env, 'adjust_horizon', None)
     if callable(update):
       update(delta)
+
+  def set_horizon(self, horizon: int) -> None:
+    update = getattr(self.current_env, 'set_horizon', None)
+    if callable(update):
+      update(horizon)
+      print_runtime_event('wm horizon', self.horizon)
+      return
+    current = getattr(self.current_env, 'horizon', None)
+    if current is not None:
+      try:
+        setattr(self.current_env, 'horizon', max(1, int(horizon)))
+        print_runtime_event('wm horizon', self.horizon)
+        return
+      except (AttributeError, TypeError, ValueError):
+        pass
+      try:
+        self.adjust_horizon(int(horizon) - int(current))
+      except (TypeError, ValueError):
+        pass
 
   def choose_action(self, human_action: int) -> int:
     if self.controller_index > 0 and self.policies:
@@ -125,6 +171,11 @@ class EnvPlaySession(PlaySession):
       return policy(human_action)
     return human_action
 
+  def _control_label(self) -> str:
+    if self.controller_index > 0 and self.policies:
+      return self.policies[self.controller_index - 1].name
+    return 'human'
+
   def step(self, action: int) -> StepResult:
     result = self.current_env.step(action)
     self.current_obs = result.obs
@@ -134,21 +185,40 @@ class EnvPlaySession(PlaySession):
 
   def header(self, action: int, info: dict[str, Any]) -> list[str]:
     info = info if isinstance(info, dict) else {}
-    reward = info.get('reward')
-    ret = info.get('return')
-    step = info.get('step', info.get('steps', 0))
+    control = info.get('control')
+    if control is None:
+      control = self._control_label()
     action_name = info.get('action_name')
     action_idx = _action_to_int(action)
     if action_name is None:
       action_name = self.action_names[action_idx] if 0 <= action_idx < len(self.action_names) else str(action_idx)
-    lines = [
-        f'Env    : {self.current_index + 1}/{len(self.envs)} ({self.current_name})',
-        f'Step   : {step}',
-        f'Reward : {_fmt_scalar(reward)}',
-        f'Return : {_fmt_scalar(ret)}',
-        f'Action : {action_name}',
-    ]
-    return lines
+    status = {
+        'env_name': self.current_name,
+        'env_kind': self.current_kind,
+        'control': control,
+        'step': info.get('step', info.get('steps', 0)),
+        'reward': info.get('reward'),
+        'return': info.get('return'),
+        'action_name': action_name,
+        'terminal': info.get('terminal', info.get('term', info.get('is_terminal'))),
+        'continuation': info.get('continuation', info.get('cont_prob', info.get('cont'))),
+        'done': info.get('done'),
+        'trunc': info.get('trunc'),
+    }
+    return play_status_lines(status, info.get('status_extras'))
+
+  def record_metadata(self) -> dict[str, Any]:
+    return {
+        'backend': self.current_name,
+        'backend_index': int(self.current_index),
+        'backend_count': int(len(self.envs)),
+        'controller': self._control_label(),
+        'policy_index': int(self.selected_policy_index),
+        'policy_count': int(len(self.policies)),
+        'policy_label': (
+            self.policies[self.selected_policy_index].name
+            if self.policies else ''),
+    }
 
   def render_frame(self, size: int, header_lines: list[str]):
     render = getattr(self.current_env, 'render_frame', None)
