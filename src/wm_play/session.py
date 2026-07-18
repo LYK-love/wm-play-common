@@ -235,6 +235,20 @@ class EnvPlaySession(PlaySession):
       return self.render_fn(self.current_obs, size)
     return obs_to_image(self.current_obs).resize((size, size), resample=Image.NEAREST)
 
+  def record_metadata(self) -> dict[str, Any]:
+    env_names = [
+        getattr(slot.env, 'name', f'env_{idx}')
+        for idx, slot in enumerate(self.envs)
+    ]
+    metadata = {
+        'envs': env_names,
+        'active_env': getattr(self.current_env, 'name', self.current_index),
+        'horizon': self.horizon,
+    }
+    if self.policy is not None:
+      metadata['policy'] = getattr(self.policy, 'name', type(self.policy).__name__)
+    return metadata
+
   def close(self) -> None:
     for slot in self.envs:
       slot.env.close()
