@@ -10,3 +10,5 @@ dist/
 .DS_Store
 .env
 .venv/
+artifacts/
+logs/

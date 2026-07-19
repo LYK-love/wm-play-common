@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import os
+import struct
 from typing import Any
 
 import numpy as np
@@ -154,6 +155,21 @@ SIMPLE_ALE_FOCUS_FIELDS = {
     ),
 }
 
+EXACT_ALE_RAM_ALIASES = {
+    'breakout': {
+        57: 'lives', 72: 'paddle_x', 76: 'score_bcd_hi', 77: 'score_bcd_lo',
+        99: 'ball_x', 101: 'ball_y',
+    },
+    'boxing': {
+        17: 'clock', 18: 'player_score', 19: 'opponent_score',
+        32: 'player_x', 33: 'opponent_x', 34: 'player_y', 35: 'opponent_y',
+    },
+    'pong': {
+        13: 'opponent_score', 14: 'player_score', 49: 'ball_x',
+        50: 'opponent_y', 51: 'player_y', 54: 'ball_y',
+    },
+}
+
 
 def _ram_owner(env):
   return getattr(env, 'unwrapped', env)
@@ -232,6 +248,8 @@ def _simple_ale_game(ram: np.ndarray | None, fields: list[dict[str, Any]]) -> st
     return 'breakout'
   if magic == b'MBOX':
     return 'boxing'
+  if magic == b'SAEX' and ram.size >= 6:
+    return {1: 'breakout', 2: 'boxing', 3: 'pong'}.get(int(ram[5]))
   return None
 
 
@@ -242,6 +260,10 @@ def _decode_field(ram: np.ndarray, field: dict[str, Any]) -> str:
   encoding = str(field.get('encoding', '')).lower()
   if encoding == 'ascii':
     return raw.decode('ascii', errors='replace')
+  if encoding == 'float32-le' and len(raw) == 4:
+    return f'{struct.unpack("<f", raw)[0]:.8g}'
+  if encoding == 'float64-le' and len(raw) == 8:
+    return f'{struct.unpack("<d", raw)[0]:.12g}'
   if encoding.startswith('int'):
     return str(int.from_bytes(raw, 'little', signed=True))
   if encoding.startswith('uint') or encoding in {'direction', 'bitfield'}:
@@ -261,6 +283,9 @@ class GymRAMController:
     self.env_name = str(env_name)
     self.fields = _schema_fields(env)
     ram = _read_env_ram(env)
+    self.exact_state = bool(
+        ram is not None and ram.size >= 6 and bytes(ram[:4]) == b'SAEX'
+    )
     self.game = _simple_ale_game(ram, self.fields)
     self.available = ram is not None
     self.complete_state = self.game is not None
@@ -268,6 +293,10 @@ class GymRAMController:
     self.persistent: dict[int, int] = {}
     self.last_error = ''
     self._byte_specs = self._build_byte_specs(0 if ram is None else len(ram))
+    self._visible_offsets = [
+        dim for dim, spec in enumerate(self._byte_specs)
+        if not str(spec['encoding']).lower().startswith('opaque')
+    ]
     focus = self._focus_offsets()
     if focus:
       self.selected_dim = focus[0]
@@ -275,14 +304,24 @@ class GymRAMController:
   @property
   def schema_name(self) -> str:
     if self.game == 'breakout':
-      return 'SimpleALE Breakout complete-state RAM (MBRK v1)'
+      marker = 'SAEX' if self.exact_state else 'MBRK'
+      adjective = 'exact ' if self.exact_state else ''
+      return f'SimpleALE Breakout {adjective}complete-state RAM ({marker} v1)'
     if self.game == 'boxing':
-      return 'SimpleALE Boxing complete-state RAM (MBOX v1)'
+      marker = 'SAEX' if self.exact_state else 'MBOX'
+      adjective = 'exact ' if self.exact_state else ''
+      return f'SimpleALE Boxing {adjective}complete-state RAM ({marker} v1)'
+    if self.game == 'pong':
+      return 'SimpleALE Pong exact complete-state RAM (SAEX v1)'
     return 'ALE hardware RAM'
 
   @property
   def semantics(self) -> str:
     if self.complete_state:
+      if self.exact_state:
+        return ('Real ALE/Stella system state, sticky-action and frame-skip RNG, '
+                'action history, framebuffers, and editable Atari hardware RAM '
+                'are encoded here; opaque snapshot bytes are hidden in this panel.')
       return ('All evolving game state, including RNG and action history, is '
               'encoded here; this is not the original Atari RAM layout.')
     return ('Raw environment RAM bytes; for real ALE this is an observation, '
@@ -304,18 +343,53 @@ class GymRAMController:
         if not 0 <= dim < count:
           continue
         name = field['name'] if size == 1 else f"{field['name']}[{byte_index}]"
+        field_name = field['name']
+        encoding = field['encoding']
+        if str(field['encoding']).lower() == 'atari-ram':
+          name = f'atari_ram_{byte_index}'
+          field_name = name
+          encoding = 'uint8'
         specs[dim] = {
             'name': name,
-            'field_name': field['name'],
+            'field_name': field_name,
             'field_offset': offset,
             'field_size': size,
-            'encoding': field['encoding'],
+            'encoding': encoding,
             'description': field['description'],
             'editable': bool(field['mutable']),
         }
+    hardware = next(
+        (field for field in self.fields if field['name'] == 'hardware_ram'), None
+    )
+    if hardware is not None:
+      base = int(hardware['offset'])
+      for address, alias in EXACT_ALE_RAM_ALIASES.get(self.game or '', {}).items():
+        dim = base + int(address)
+        if 0 <= dim < count:
+          specs[dim].update(
+              name=alias,
+              field_name=alias,
+              field_offset=dim,
+              field_size=1,
+              description=f'{alias} (Atari hardware RAM[{address}]).',
+          )
     return specs
 
   def _focus_offsets(self) -> list[int]:
+    if self.exact_state:
+      by_name = {str(field['name']): int(field['offset']) for field in self.fields}
+      offsets = [
+          by_name[name] for name in (
+              'flags', 'frameskip_min', 'frameskip_max', 'sticky_probability', 'seed'
+          ) if name in by_name
+      ]
+      hardware = by_name.get('hardware_ram')
+      if hardware is not None:
+        offsets.extend(
+            hardware + address
+            for address in EXACT_ALE_RAM_ALIASES.get(self.game or '', {})
+        )
+      return offsets
     names = SIMPLE_ALE_FOCUS_FIELDS.get(self.game or '', ())
     by_name = {str(field['name']): int(field['offset']) for field in self.fields}
     offsets = [by_name[name] for name in names if name in by_name]
@@ -333,6 +407,8 @@ class GymRAMController:
     if not 0 <= int(dim) < len(self._byte_specs):
       return None
     spec = self._byte_specs[int(dim)]
+    if spec['encoding'] == 'uint8' and str(spec['name']).startswith('atari_ram_'):
+      return None
     offset = int(spec['field_offset'])
     return next((field for field in self.fields if int(field['offset']) == offset), None)
 
@@ -404,14 +480,16 @@ class GymRAMController:
     if ram is None:
       return {'ram': [], 'focus_dims': [], 'all_dims': [], 'ram_error': self.last_error}
     focus_dims = [self.item(ram, dim, focus=True) for dim in self._focus_offsets()]
-    all_dims = [self.item(ram, dim) for dim in range(len(ram))]
-    selected = all_dims[self.selected_dim]
+    all_dims = [self.item(ram, dim) for dim in self._visible_offsets]
+    selected = self.item(ram, self.selected_dim)
     action_name = (
         action_names[last_action] if 0 <= last_action < len(action_names)
         else str(last_action)
     )
     return {
-        'ram': ram.tolist(),
+        'ram': ram.tolist() if len(ram) <= 1024 else [],
+        'ram_snapshot_omitted': bool(len(ram) > 1024),
+        'ram_visible_slot_count': len(self._visible_offsets),
         'ram_slot_count': int(len(ram)),
         'ram_schema_name': self.schema_name,
         'ram_semantics': self.semantics,

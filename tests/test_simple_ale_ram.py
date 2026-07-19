@@ -14,8 +14,9 @@ from wm_play.web_server import WebSharedState, _ram_capable, _render_state
 @pytest.mark.parametrize(
     ("env_name", "magic", "game", "focus_name"),
     [
-        ("simple_ale:SimpleALE/Breakout-v5", b"MBRK", "breakout", "paddle_x"),
-        ("simple_ale:SimpleALE/Boxing-v5", b"MBOX", "boxing", "player_x"),
+        ("simple_ale:SimpleALE/Breakout-v5", b"SAEX", "breakout", "paddle_x"),
+        ("simple_ale:SimpleALE/Boxing-v5", b"SAEX", "boxing", "player_x"),
+        ("simple_ale:SimpleALE/Pong-v5", b"SAEX", "pong", "ball_x"),
     ],
 )
 def test_simple_ale_schema_is_discovered_from_the_environment(
@@ -34,8 +35,10 @@ def test_simple_ale_schema_is_discovered_from_the_environment(
     assert state["ram_game"] == game
     assert state["ram_is_complete_state"] is True
     assert "complete-state RAM" in state["ram_schema_name"]
-    assert "not the original Atari RAM layout" in state["ram_semantics"]
-    assert len(state["all_dims"]) == 128
+    assert "Real ALE/Stella system state" in state["ram_semantics"]
+    assert state["ram_slot_count"] == 16384
+    assert len(state["all_dims"]) == 224
+    assert state["ram_snapshot_omitted"] is True
     assert focus_name in {item["name"] for item in state["focus_dims"]}
     assert state["all_dims"][0]["editable"] is False
     session.close()
@@ -53,13 +56,14 @@ def test_simple_ale_ram_edit_and_persistence_use_atomic_state_writes() -> None:
     assert int(env.current_ram[0]) == original_magic
     assert "read-only" in env.ram.last_error
 
-    env._apply_dim_value_from_web(8, 40)
-    assert int(env.current_ram[8]) == 40
+    paddle_x = 96 + 72
+    env._apply_dim_value_from_web(paddle_x, 40)
+    assert int(env.current_ram[paddle_x]) == 40
     assert env.ram.last_error == ""
 
-    env._persist_dim_value_from_web(8, 41)
+    env._persist_dim_value_from_web(paddle_x, 41)
     result = env.step(3)
-    assert int(env.current_ram[8]) == 41
+    assert int(env.current_ram[paddle_x]) == 41
     np.testing.assert_array_equal(result.obs, env._read_rgb_frame())
     assert env.get_web_state()["persistent_count"] == 1
     env.close()
@@ -71,13 +75,13 @@ def test_boxing_field_values_are_decoded_with_its_own_schema() -> None:
         "simple_ale:SimpleALE/Boxing-v5", gym_backend="gymnasium", seed=5
     )
     env.reset()
-    env._apply_dim_value_from_web(12, 9)
+    env._apply_dim_value_from_web(96 + 18, 9)
     state = env.get_web_state()
     player_score = next(
         item for item in state["focus_dims"] if item["name"] == "player_score"
     )
     assert player_score["formatted"] == "9"
-    assert player_score["description"] == "Player score, capped at 100."
+    assert "Atari hardware RAM[18]" in player_score["description"]
     env.close()
 
 
@@ -91,7 +95,7 @@ def test_headless_rollout_records_simple_ale_ram_after_session_delegation() -> N
     rollout = run_episode(session, max_steps=8, human_action=0, size=64)
     assert rollout.frames.shape == (9, 64, 64, 3)
     assert rollout.actions.shape == (8,)
-    assert session.current_ram.shape == (128,)
+    assert session.current_ram.shape == (16384,)
     assert session.record_metadata()["ram_is_complete_state"] is True
     assert _ram_capable(SimpleNamespace(ram=True), session)
     session.close()
