@@ -280,6 +280,23 @@ select:disabled {
   cursor: pointer;
 }
 
+.ram-cell.readonly {
+  opacity: 0.58;
+}
+
+.ram-schema {
+  color: var(--accent);
+  font-size: 0.78rem;
+  margin: 0.25rem 0 0;
+  max-width: 32rem;
+}
+
+.ram-error {
+  color: #ff8f86;
+  font-size: 0.82rem;
+  margin: 0.6rem 0 0;
+}
+
 .ram-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 90px 70px;

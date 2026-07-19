@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wm-play-common"
-version = "0.1.0"
+version = "0.2.0"
 description = "Shared interactive play abstractions for action-conditioned world models."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -12,6 +12,7 @@ dependencies = ["pygame", "Pillow", "numpy", "flask", "flask-socketio", "imageio
 
 [project.optional-dependencies]
 gym = ["gymnasium"]
+dev = ["gymnasium", "pytest>=8"]
 
 [project.scripts]
 wm-play = "wm_play.standalone:main"
@@ -21,3 +22,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 wm_play = ["web/*", "web/vendor/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

@@ -20,6 +20,9 @@ const els = {
   exportPaths: document.getElementById('export-paths'),
   statusLines: document.getElementById('status-lines'),
   ramPanel: document.getElementById('ram-panel'),
+  ramSchema: document.getElementById('ram-schema'),
+  ramSemantics: document.getElementById('ram-semantics'),
+  ramError: document.getElementById('ram-error'),
   ramWatch: document.getElementById('ram-watch'),
   ramAll: document.getElementById('ram-all'),
   toggleAllRam: document.getElementById('toggle-all-ram'),
@@ -89,7 +92,8 @@ function isInputLike(target) {
 }
 
 function dimLabel(dim) {
-  return `${dim.name || `ram_${dim.dim}`} - RAM[${dim.dim}]`;
+  const suffix = dim.editable === false ? ' (read-only)' : '';
+  return `${dim.name || `ram_${dim.dim}`} - RAM[${dim.dim}]${suffix}`;
 }
 
 function renderStatus(data) {
@@ -174,6 +178,11 @@ function renderRam(data) {
   const dims = data.all_dims || [];
   const focus = data.focus_dims || [];
   const visible = allRamOpen ? dims : focus;
+  els.ramSchema.textContent = data.ram_schema_name || 'RAM';
+  els.ramSemantics.textContent = data.ram_semantics || '';
+  const ramError = data.ram_error || '';
+  els.ramError.textContent = ramError;
+  els.ramError.classList.toggle('hidden', !ramError);
   els.toggleAllRam.textContent = allRamOpen ? 'Focus RAM' : 'All RAM';
   els.ramWatch.classList.toggle('hidden', allRamOpen);
   els.ramAll.classList.toggle('hidden', !allRamOpen);
@@ -183,6 +192,7 @@ function renderRam(data) {
     const row = document.createElement('button');
     row.className = `ram-row ${dim.persistent ? 'persistent' : ''}`;
     row.innerHTML = `<span>${dim.name}</span><code>RAM[${dim.dim}]</code><strong>${dim.formatted ?? dim.value}</strong>`;
+    row.title = [dim.description, dim.encoding].filter(Boolean).join(' — ');
     row.onclick = () => send({ type: 'select_dim', dim: dim.dim });
     els.ramWatch.appendChild(row);
   }
@@ -190,13 +200,13 @@ function renderRam(data) {
   els.ramAll.innerHTML = '';
   for (const dim of visible) {
     const cell = document.createElement('button');
-    cell.className = `ram-cell ${dim.persistent ? 'persistent' : ''}`;
+    cell.className = `ram-cell ${dim.persistent ? 'persistent' : ''} ${dim.editable === false ? 'readonly' : ''}`;
     cell.innerHTML = `<span>${dim.dim}</span><strong>${dim.formatted ?? dim.value}</strong><small>${dim.name}</small>`;
+    cell.title = [dim.description, dim.encoding, `field=${dim.field_value ?? dim.value}`].filter(Boolean).join(' — ');
     cell.onclick = () => send({ type: 'select_dim', dim: dim.dim });
     els.ramAll.appendChild(cell);
   }
 
-  const current = els.editDim.value;
   els.editDim.innerHTML = '';
   for (const dim of dims) {
     const opt = document.createElement('option');
@@ -204,15 +214,16 @@ function renderRam(data) {
     opt.textContent = dimLabel(dim);
     els.editDim.appendChild(opt);
   }
-  if (current) els.editDim.value = current;
-  if (!els.editDim.value && data.selected_dim !== undefined) {
+  if (data.selected_dim !== undefined) {
     els.editDim.value = String(data.selected_dim);
   }
   const canEdit = !!data.can_edit;
+  const selected = dims.find((dim) => String(dim.dim) === els.editDim.value);
+  const selectedEditable = !selected || selected.editable !== false;
   els.editDim.disabled = !canEdit;
-  els.editValue.disabled = !canEdit;
-  els.applyOnce.disabled = !canEdit;
-  els.persist.disabled = !canEdit;
+  els.editValue.disabled = !canEdit || !selectedEditable;
+  els.applyOnce.disabled = !canEdit || !selectedEditable;
+  els.persist.disabled = !canEdit || !selectedEditable;
   els.clearPersistent.disabled = !canEdit;
 }
 
@@ -294,6 +305,9 @@ els.deleteRecording.onclick = () => send({ type: 'delete_recording' });
 els.toggleAllRam.onclick = () => {
   allRamOpen = !allRamOpen;
   renderRam(latest);
+};
+els.editDim.onchange = () => {
+  send({ type: 'select_dim', dim: Number(els.editDim.value) });
 };
 els.applyOnce.onclick = () => {
   send({ type: 'apply_dim_value', dim: Number(els.editDim.value), value: Number(els.editValue.value) });

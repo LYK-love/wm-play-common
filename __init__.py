@@ -12,7 +12,7 @@ import pathlib
 _pkg = pathlib.Path(__file__).resolve().parent / 'src' / 'wm_play'
 __path__ = [str(_pkg)]
 
-from .api import (  # noqa: E402
+from wm_play.api import (  # noqa: E402
     GameEnv,
     PixelPolicy,
     PlaySession,
@@ -20,12 +20,12 @@ from .api import (  # noqa: E402
     RenderableGameEnv,
     StepResult,
 )
-from .server_summary import (  # noqa: E402
+from wm_play.server_summary import (  # noqa: E402
     CheckpointEntry,
     print_remote_server_summary,
     print_runtime_event,
 )
-from .status import play_status_columns, play_status_lines  # noqa: E402
+from wm_play.status import play_status_columns, play_status_lines  # noqa: E402
 
 __all__ = [
     'CheckpointEntry',

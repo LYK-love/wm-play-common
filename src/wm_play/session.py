@@ -183,6 +183,60 @@ class EnvPlaySession(PlaySession):
     self.last_info.setdefault('backend', self.current_name)
     return result
 
+  @property
+  def ram_available(self) -> bool:
+    return bool(getattr(self.current_env, 'ram_available', False))
+
+  @property
+  def current_ram(self):
+    if not self.ram_available:
+      return None
+    return getattr(self.current_env, 'current_ram', None)
+
+  def is_real_only(self) -> bool:
+    return all(getattr(slot.env, 'horizon', None) is None for slot in self.envs)
+
+  def _ram_call(self, name: str, *args):
+    fn = getattr(self.current_env, name, None)
+    if callable(fn):
+      return fn(*args)
+    return None
+
+  def _read_ram(self):
+    return self._ram_call('_read_ram')
+
+  def _read_rgb_frame(self):
+    return self._ram_call('_read_rgb_frame')
+
+  def _set_selected_dim(self, dim: int) -> None:
+    self._ram_call('_set_selected_dim', dim)
+
+  def _apply_selected_once(self) -> None:
+    self._ram_call('_apply_selected_once')
+
+  def _apply_dim_value_from_web(self, dim: int, value: int) -> None:
+    self._ram_call('_apply_dim_value_from_web', dim, value)
+
+  def _persist_selected(self) -> None:
+    self._ram_call('_persist_selected')
+
+  def _persist_dim_value_from_web(self, dim: int, value: int) -> None:
+    self._ram_call('_persist_dim_value_from_web', dim, value)
+
+  def _clear_all_persistent(self) -> None:
+    self._ram_call('_clear_all_persistent')
+
+  def _clear_preview_from_web(self) -> None:
+    self._ram_call('_clear_preview_from_web')
+
+  def get_web_state(self) -> dict[str, Any]:
+    state = dict(self._ram_call('get_web_state') or {})
+    state.setdefault('backend', self.current_name)
+    state.setdefault('controller', self._control_label())
+    state.setdefault('header_lines', self.header(
+        getattr(self.current_env, 'last_action', 0), self.last_info))
+    return state
+
   def header(self, action: int, info: dict[str, Any]) -> list[str]:
     info = info if isinstance(info, dict) else {}
     control = info.get('control')
@@ -212,7 +266,7 @@ class EnvPlaySession(PlaySession):
         getattr(slot.env, 'name', slot.name)
         for slot in self.envs
     ]
-    return {
+    metadata = {
         'backend': self.current_name,
         'backend_index': int(self.current_index),
         'backend_count': int(len(self.envs)),
@@ -226,6 +280,10 @@ class EnvPlaySession(PlaySession):
             self.policies[self.selected_policy_index].name
             if self.policies else ''),
     }
+    extra = getattr(self.current_env, 'record_metadata', None)
+    if callable(extra):
+      metadata.update(extra() or {})
+    return metadata
 
   def render_frame(self, size: int, header_lines: list[str]):
     render = getattr(self.current_env, 'render_frame', None)
@@ -234,20 +292,6 @@ class EnvPlaySession(PlaySession):
     if self.render_fn is not None:
       return self.render_fn(self.current_obs, size)
     return obs_to_image(self.current_obs).resize((size, size), resample=Image.NEAREST)
-
-  def record_metadata(self) -> dict[str, Any]:
-    env_names = [
-        getattr(slot.env, 'name', f'env_{idx}')
-        for idx, slot in enumerate(self.envs)
-    ]
-    metadata = {
-        'envs': env_names,
-        'active_env': getattr(self.current_env, 'name', self.current_index),
-        'horizon': self.horizon,
-    }
-    if self.policy is not None:
-      metadata['policy'] = getattr(self.policy, 'name', type(self.policy).__name__)
-    return metadata
 
   def close(self) -> None:
     for slot in self.envs:

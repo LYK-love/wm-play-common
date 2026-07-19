@@ -145,6 +145,9 @@ def _ram_edit_allowed(session: PlaySession, shared: WebSharedState) -> bool:
 
 
 def _session_supports_ram(session: PlaySession) -> bool:
+  available = getattr(session, 'ram_available', None)
+  if available is not None and not bool(available):
+    return False
   return callable(getattr(session, 'get_web_state', None)) and callable(
       getattr(session, '_read_rgb_frame', None))
 

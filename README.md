@@ -196,13 +196,13 @@ the browser recorder.
 
 ```bash
 python -m pip install -e "/path/to/wm-play-common[gym]"
-wm-play --env-id PongNoFrameskip-v4 --web-port 9876
+wm-play --env-name PongNoFrameskip-v4 --web-port 9876
 ```
 
 For local source-tree testing without installing the console script:
 
 ```bash
-PYTHONPATH=src python -m wm_play --env-id PongNoFrameskip-v4 --web-port 9876
+PYTHONPATH=src python -m wm_play --env-name PongNoFrameskip-v4 --web-port 9876
 ```
 
 The standalone runner opens the shared browser UI with only the real
@@ -221,6 +221,21 @@ those packages plus the environment package/ROMs needed by the selected
 Atari-style action names to the shared `W/A/S/D/Space` controls when the env
 exposes `get_action_meanings()`, and falls back to simple numeric actions for
 generic discrete envs.
+
+SimpleALE Breakout and Boxing can use the same runner. Add `--ram` to expose
+their complete-state RAM panel:
+
+```bash
+wm-play \
+  --env-name simple_ale:SimpleALE/Breakout-v5 \
+  --gym-backend gymnasium \
+  --ram
+
+wm-play \
+  --env-name simple_ale:SimpleALE/Boxing-v5 \
+  --gym-backend gymnasium \
+  --ram
+```
 
 The standalone command intentionally does not load WM checkpoints or policy
 checkpoints. Those require project-specific adapters because checkpoint
@@ -314,9 +329,22 @@ panel. The common web layer only enables it when the session is real-env-only
 and the adapter exposes RAM read/write hooks; otherwise the normal play UI is
 used.
 
-The common layer treats RAM as editable byte slots plus optional adapter hooks.
-It does not define game-specific RAM meanings. Slot labels, focused dimensions,
-and convenience actions such as Pong serve setup belong in the project adapter.
+The standalone runner discovers SimpleALE's versioned `describe_ram()` schema
+at runtime, without making SimpleALE a required dependency. It displays named
+fields, multi-byte decoded values, descriptions, immutable bytes, and focused
+game variables. Breakout and Boxing use separate layouts.
+
+The panel explicitly distinguishes the meanings:
+
+- **Real ALE:** hardware RAM observation, not a complete emulator state.
+- **SimpleALE:** complete state RAM containing every evolving variable,
+  including RNG and action history; it is not the original Atari RAM layout.
+
+Writes remain byte-level and are allowed only while paused. SimpleALE writes
+use its atomic `set_ram()` API, reject immutable magic/version/reserved bytes,
+and surface schema validation errors in the panel. Persistent values are
+reapplied after every environment step. Other projects can still provide
+adapter-specific labels, focus dimensions, and convenience actions.
 
 ## Layout
 
@@ -367,6 +395,8 @@ DIAMOND uses `./src/wm_play` as its submodule path.
 
 ## RAM Panel Rule
 
-The RAM panel is optional and appears only when the project adapter exposes RAM
-state/edit methods and the server is running real env only. If any WM backend is
-loaded, the UI stays in normal play mode without RAM controls.
+The RAM panel is optional and appears only with `--ram`, a RAM-capable real
+environment, and no loaded WM backend. The standalone Gym runner supplies these
+hooks automatically for real ALE and SimpleALE; project sessions can still
+provide custom hooks. If any WM backend is loaded, the UI stays in normal play
+mode without RAM controls.

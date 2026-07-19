@@ -83,11 +83,13 @@
               <div>
                 <p class="eyebrow">RAM Monitor</p>
                 <h2>Watch</h2>
+                <p id="ram-schema" class="ram-schema"></p>
               </div>
               <button id="toggle-all-ram" class="btn btn-quiet">All RAM</button>
             </div>
             <div id="ram-watch" class="ram-list"></div>
             <div id="ram-all" class="ram-grid hidden"></div>
+            <p id="ram-semantics" class="hint"></p>
           </section>
 
           <section class="panel">
@@ -105,6 +107,7 @@
               <button id="persist" class="btn btn-command">Persist</button>
             </div>
             <p class="hint">RAM writes are enabled only while paused and only for real-env RAM sessions.</p>
+            <p id="ram-error" class="ram-error hidden"></p>
           </section>
           </div>
         </aside>
