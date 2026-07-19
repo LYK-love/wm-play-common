@@ -170,6 +170,35 @@ EXACT_ALE_RAM_ALIASES = {
     },
 }
 
+EXACT_ALE_GAMES_BY_CODE = {
+    1: ('breakout', 'Breakout'),
+    2: ('boxing', 'Boxing'),
+    3: ('pong', 'Pong'),
+    4: ('alien', 'Alien'),
+    5: ('amidar', 'Amidar'),
+    6: ('assault', 'Assault'),
+    7: ('asterix', 'Asterix'),
+    8: ('bank_heist', 'BankHeist'),
+    9: ('battle_zone', 'BattleZone'),
+    10: ('chopper_command', 'ChopperCommand'),
+    11: ('crazy_climber', 'CrazyClimber'),
+    12: ('demon_attack', 'DemonAttack'),
+    13: ('freeway', 'Freeway'),
+    14: ('frostbite', 'Frostbite'),
+    15: ('gopher', 'Gopher'),
+    16: ('hero', 'Hero'),
+    17: ('jamesbond', 'Jamesbond'),
+    18: ('kangaroo', 'Kangaroo'),
+    19: ('krull', 'Krull'),
+    20: ('kung_fu_master', 'KungFuMaster'),
+    21: ('ms_pacman', 'MsPacman'),
+    22: ('private_eye', 'PrivateEye'),
+    23: ('qbert', 'Qbert'),
+    24: ('road_runner', 'RoadRunner'),
+    25: ('seaquest', 'Seaquest'),
+    26: ('up_n_down', 'UpNDown'),
+}
+
 
 def _ram_owner(env):
   return getattr(env, 'unwrapped', env)
@@ -249,7 +278,8 @@ def _simple_ale_game(ram: np.ndarray | None, fields: list[dict[str, Any]]) -> st
   if magic == b'MBOX':
     return 'boxing'
   if magic == b'SAEX' and ram.size >= 6:
-    return {1: 'breakout', 2: 'boxing', 3: 'pong'}.get(int(ram[5]))
+    game = EXACT_ALE_GAMES_BY_CODE.get(int(ram[5]))
+    return None if game is None else game[0]
   return None
 
 
@@ -303,16 +333,17 @@ class GymRAMController:
 
   @property
   def schema_name(self) -> str:
+    if self.exact_state and self.game is not None:
+      display_name = next(
+          (display for key, display in EXACT_ALE_GAMES_BY_CODE.values()
+           if key == self.game),
+          self.game,
+      )
+      return f'SimpleALE {display_name} exact complete-state RAM (SAEX v1)'
     if self.game == 'breakout':
-      marker = 'SAEX' if self.exact_state else 'MBRK'
-      adjective = 'exact ' if self.exact_state else ''
-      return f'SimpleALE Breakout {adjective}complete-state RAM ({marker} v1)'
+      return 'SimpleALE Breakout complete-state RAM (MBRK v1)'
     if self.game == 'boxing':
-      marker = 'SAEX' if self.exact_state else 'MBOX'
-      adjective = 'exact ' if self.exact_state else ''
-      return f'SimpleALE Boxing {adjective}complete-state RAM ({marker} v1)'
-    if self.game == 'pong':
-      return 'SimpleALE Pong exact complete-state RAM (SAEX v1)'
+      return 'SimpleALE Boxing complete-state RAM (MBOX v1)'
     return 'ALE hardware RAM'
 
   @property

@@ -7,7 +7,11 @@ import pytest
 
 from wm_play.headless import run_episode
 from wm_play.session import EnvPlaySession, EnvSlot
-from wm_play.standalone import GymGameEnv, GymRAMController
+from wm_play.standalone import (
+    EXACT_ALE_GAMES_BY_CODE,
+    GymGameEnv,
+    GymRAMController,
+)
 from wm_play.web_server import WebSharedState, _ram_capable, _render_state
 
 
@@ -17,6 +21,8 @@ from wm_play.web_server import WebSharedState, _ram_capable, _render_state
         ("simple_ale:SimpleALE/Breakout-v5", b"SAEX", "breakout", "paddle_x"),
         ("simple_ale:SimpleALE/Boxing-v5", b"SAEX", "boxing", "player_x"),
         ("simple_ale:SimpleALE/Pong-v5", b"SAEX", "pong", "ball_x"),
+        ("simple_ale:SimpleALE/Alien-v5", b"SAEX", "alien", "seed"),
+        ("simple_ale:SimpleALE/UpNDown-v5", b"SAEX", "up_n_down", "seed"),
     ],
 )
 def test_simple_ale_schema_is_discovered_from_the_environment(
@@ -42,6 +48,13 @@ def test_simple_ale_schema_is_discovered_from_the_environment(
     assert focus_name in {item["name"] for item in state["focus_dims"]}
     assert state["all_dims"][0]["editable"] is False
     session.close()
+
+
+def test_all_atari_100k_state_codes_are_known() -> None:
+    assert set(EXACT_ALE_GAMES_BY_CODE) == set(range(1, 27))
+    assert len({key for key, _ in EXACT_ALE_GAMES_BY_CODE.values()}) == 26
+    assert EXACT_ALE_GAMES_BY_CODE[4] == ("alien", "Alien")
+    assert EXACT_ALE_GAMES_BY_CODE[26] == ("up_n_down", "UpNDown")
 
 
 def test_simple_ale_ram_edit_and_persistence_use_atomic_state_writes() -> None:

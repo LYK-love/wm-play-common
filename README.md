@@ -222,8 +222,8 @@ Atari-style action names to the shared `W/A/S/D/Space` controls when the env
 exposes `get_action_meanings()`, and falls back to simple numeric actions for
 generic discrete envs.
 
-SimpleALE Breakout and Boxing can use the same runner. Add `--ram` to expose
-their complete-state RAM panel:
+All 26 SimpleALE Atari 100k games can use the same runner. Add `--ram` to
+expose their complete-state panel:
 
 ```bash
 wm-play \
@@ -232,7 +232,7 @@ wm-play \
   --ram
 
 wm-play \
-  --env-name simple_ale:SimpleALE/Boxing-v5 \
+  --env-name simple_ale:SimpleALE/Seaquest-v5 \
   --gym-backend gymnasium \
   --ram
 ```
@@ -330,15 +330,16 @@ and the adapter exposes RAM read/write hooks; otherwise the normal play UI is
 used.
 
 The standalone runner discovers SimpleALE's versioned `describe_ram()` schema
-at runtime, without making SimpleALE a required dependency. It displays named
-fields, multi-byte decoded values, descriptions, immutable bytes, and focused
-game variables. Breakout and Boxing use separate layouts.
+at runtime, without making SimpleALE a required dependency. It recognizes all
+26 Atari 100k game codes and displays decoded state metadata plus the editable
+128-byte Atari hardware-RAM mirror. Known Breakout, Boxing, and Pong addresses
+also receive convenience labels; other games remain truthfully unnamed.
 
 The panel explicitly distinguishes the meanings:
 
 - **Real ALE:** hardware RAM observation, not a complete emulator state.
-- **SimpleALE:** complete state RAM containing every evolving variable,
-  including RNG and action history; it is not the original Atari RAM layout.
+- **SimpleALE:** real ALE/Stella system state plus RNG, action history,
+  framebuffers, configuration, and an editable mirror of original Atari RAM.
 
 Writes remain byte-level and are allowed only while paused. SimpleALE writes
 use its atomic `set_ram()` API, reject immutable magic/version/reserved bytes,
